@@ -1,6 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
-import { colors, spacing, borderRadius, typography, shadows } from '../utils/theme';
+import {
+  colors,
+  spacing,
+  borderRadius,
+  typography,
+  shadows,
+  fonts,
+} from '../utils/theme';
 import { getTimeUntil, formatTime } from '../utils/helpers';
 import { soundService } from '../services/sound';
 
@@ -27,13 +34,13 @@ export const NextFeedingTimer: React.FC<NextFeedingTimerProps> = ({
       Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
-            toValue: 1.05,
-            duration: 500,
+            toValue: 1.03,
+            duration: 600,
             useNativeDriver: true,
           }),
           Animated.timing(pulseAnim, {
             toValue: 1,
-            duration: 500,
+            duration: 600,
             useNativeDriver: true,
           }),
         ])
@@ -99,11 +106,6 @@ export const NextFeedingTimer: React.FC<NextFeedingTimerProps> = ({
     );
   }
 
-  const shadowOpacity = glowAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.1, 0.4],
-  });
-
   return (
     <Animated.View
       style={[
@@ -111,7 +113,6 @@ export const NextFeedingTimer: React.FC<NextFeedingTimerProps> = ({
         isUrgent && styles.containerUrgent,
         {
           transform: [{ scale: pulseAnim }],
-          shadowOpacity: isUrgent ? shadowOpacity : 0.1,
         },
       ]}
     >
@@ -150,8 +151,8 @@ export const NextFeedingTimer: React.FC<NextFeedingTimerProps> = ({
 
       {isUrgent && (
         <View style={styles.urgentAlert}>
-          <Text style={styles.urgentIcon}>🔔</Text>
-          <Text style={styles.urgentText}>הגיע הזמן להתכונן להאכלה!</Text>
+          <Text style={styles.urgentAlertIcon}>🔔</Text>
+          <Text style={styles.urgentAlertText}>הגיע הזמן להתכונן להאכלה!</Text>
         </View>
       )}
     </Animated.View>
@@ -164,10 +165,9 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xl,
     padding: spacing.lg,
     ...shadows.md,
-    shadowColor: colors.primary,
   },
   containerUrgent: {
-    backgroundColor: '#FFF0F5',
+    backgroundColor: colors.urgentBackground,
     borderWidth: 2,
     borderColor: colors.primary,
   },
@@ -187,6 +187,7 @@ const styles = StyleSheet.create({
   },
   title: {
     ...typography.h3,
+    fontFamily: fonts.semiBold,
     color: colors.text,
   },
   urgentBadge: {
@@ -198,20 +199,19 @@ const styles = StyleSheet.create({
   urgentBadgeText: {
     color: colors.white,
     fontSize: 12,
-    fontWeight: 'bold',
+    fontFamily: fonts.bold,
   },
   timerSection: {
     alignItems: 'center',
     paddingVertical: spacing.md,
   },
   timeLeft: {
-    fontSize: 48,
-    fontWeight: 'bold',
+    ...typography.timer,
     color: colors.primary,
     marginBottom: spacing.sm,
   },
   timeLeftUrgent: {
-    color: '#E91E63',
+    color: colors.urgentText,
   },
   scheduledRow: {
     flexDirection: 'row-reverse',
@@ -223,6 +223,7 @@ const styles = StyleSheet.create({
   },
   scheduledTime: {
     ...typography.body,
+    fontFamily: fonts.medium,
     color: colors.textSecondary,
   },
   lastFeedingRow: {
@@ -240,6 +241,7 @@ const styles = StyleSheet.create({
   },
   lastFeeding: {
     ...typography.bodySmall,
+    fontFamily: fonts.regular,
     color: colors.textSecondary,
   },
   emptyState: {
@@ -252,12 +254,13 @@ const styles = StyleSheet.create({
   },
   noDataText: {
     ...typography.body,
+    fontFamily: fonts.semiBold,
     color: colors.text,
-    fontWeight: '600',
     marginBottom: spacing.xs,
   },
   noDataSubtext: {
     ...typography.bodySmall,
+    fontFamily: fonts.regular,
     color: colors.textSecondary,
   },
   urgentAlert: {
@@ -270,13 +273,13 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.lg,
     marginTop: spacing.md,
   },
-  urgentIcon: {
+  urgentAlertIcon: {
     fontSize: 18,
     marginLeft: spacing.sm,
   },
-  urgentText: {
+  urgentAlertText: {
     color: colors.white,
-    fontWeight: '600',
+    fontFamily: fonts.semiBold,
     fontSize: 14,
   },
 });

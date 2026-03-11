@@ -1,9 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { StatusBar, I18nManager, Text } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { StatusBar, I18nManager, Text, View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import * as SplashScreenExpo from 'expo-splash-screen';
+import {
+  useFonts,
+  Heebo_400Regular,
+  Heebo_500Medium,
+  Heebo_600SemiBold,
+  Heebo_700Bold,
+} from '@expo-google-fonts/heebo';
 
 import { SplashScreen } from './src/screens/SplashScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
@@ -21,6 +29,8 @@ import { colors } from './src/utils/theme';
 I18nManager.allowRTL(true);
 I18nManager.forceRTL(true);
 
+SplashScreenExpo.preventAutoHideAsync();
+
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
@@ -33,20 +43,21 @@ const TabNavigator = ({ onLogout }: { onLogout: () => void }) => {
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
-          paddingBottom: 5,
-          paddingTop: 5,
-          height: 60,
+          paddingBottom: 8,
+          paddingTop: 8,
+          height: 65,
         },
         tabBarLabelStyle: {
           fontSize: 12,
-          fontWeight: '500',
+          fontFamily: 'Heebo_500Medium',
         },
         headerStyle: {
           backgroundColor: colors.primary,
         },
         headerTintColor: colors.white,
         headerTitleStyle: {
-          fontWeight: '600',
+          fontFamily: 'Heebo_600SemiBold',
+          fontSize: 18,
         },
       }}
     >
@@ -55,7 +66,7 @@ const TabNavigator = ({ onLogout }: { onLogout: () => void }) => {
         component={HomeScreen}
         options={{
           title: 'בית',
-          tabBarIcon: ({ color }) => <TabIcon icon="🏠" color={color} />,
+          tabBarIcon: ({ color }) => <TabIcon icon="🏠" />,
           headerTitle: 'Nili Baby',
         }}
       />
@@ -64,7 +75,7 @@ const TabNavigator = ({ onLogout }: { onLogout: () => void }) => {
         component={RemindersScreen}
         options={{
           title: 'תזכורות',
-          tabBarIcon: ({ color }) => <TabIcon icon="⏰" color={color} />,
+          tabBarIcon: ({ color }) => <TabIcon icon="⏰" />,
           headerTitle: 'תזכורות',
         }}
       />
@@ -73,7 +84,7 @@ const TabNavigator = ({ onLogout }: { onLogout: () => void }) => {
         component={AppointmentsScreen}
         options={{
           title: 'תורים',
-          tabBarIcon: ({ color }) => <TabIcon icon="📅" color={color} />,
+          tabBarIcon: ({ color }) => <TabIcon icon="📅" />,
           headerTitle: 'תורים',
         }}
       />
@@ -81,7 +92,7 @@ const TabNavigator = ({ onLogout }: { onLogout: () => void }) => {
         name="Settings"
         options={{
           title: 'הגדרות',
-          tabBarIcon: ({ color }) => <TabIcon icon="⚙️" color={color} />,
+          tabBarIcon: ({ color }) => <TabIcon icon="⚙️" />,
           headerTitle: 'הגדרות',
         }}
       >
@@ -91,21 +102,44 @@ const TabNavigator = ({ onLogout }: { onLogout: () => void }) => {
   );
 };
 
-const TabIcon = ({ icon, color }: { icon: string; color: string }) => (
-  <React.Fragment>{icon}</React.Fragment>
+const TabIcon = ({ icon }: { icon: string }) => (
+  <Text style={{ fontSize: 22 }}>{icon}</Text>
 );
 
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
+  const [appIsReady, setAppIsReady] = useState(false);
+
+  const [fontsLoaded] = useFonts({
+    Heebo_400Regular,
+    Heebo_500Medium,
+    Heebo_600SemiBold,
+    Heebo_700Bold,
+  });
 
   useEffect(() => {
-    soundService.init();
-    
+    async function prepare() {
+      try {
+        soundService.init();
+      } catch (e) {
+        console.warn(e);
+      } finally {
+        setAppIsReady(true);
+      }
+    }
+    prepare();
+
     return () => {
       soundService.cleanup();
     };
   }, []);
+
+  const onLayoutRootView = useCallback(async () => {
+    if (appIsReady && fontsLoaded) {
+      await SplashScreenExpo.hideAsync();
+    }
+  }, [appIsReady, fontsLoaded]);
 
   const checkAuth = async () => {
     const token = await storage.getToken();
@@ -117,9 +151,17 @@ export default function App() {
     checkAuth();
   };
 
+  if (!appIsReady || !fontsLoaded) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.primary }}>
+        <ActivityIndicator size="large" color={colors.white} />
+      </View>
+    );
+  }
+
   if (showSplash) {
     return (
-      <SafeAreaProvider>
+      <SafeAreaProvider onLayout={onLayoutRootView}>
         <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
         <SplashScreen onFinish={handleSplashFinish} />
       </SafeAreaProvider>
@@ -131,7 +173,7 @@ export default function App() {
   }
 
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider onLayout={onLayoutRootView}>
       <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
       <NavigationContainer>
         <Stack.Navigator
@@ -141,7 +183,8 @@ export default function App() {
             },
             headerTintColor: colors.white,
             headerTitleStyle: {
-              fontWeight: '600',
+              fontFamily: 'Heebo_600SemiBold',
+              fontSize: 18,
             },
           }}
         >

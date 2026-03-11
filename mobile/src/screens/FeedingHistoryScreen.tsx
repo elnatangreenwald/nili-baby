@@ -4,52 +4,55 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  Alert,
   RefreshControl,
   Animated,
+  TouchableOpacity,
   Dimensions,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { colors, spacing, typography, shadows, borderRadius } from '../utils/theme';
+import {
+  colors,
+  spacing,
+  borderRadius,
+  typography,
+  shadows,
+  fonts,
+} from '../utils/theme';
 import { FeedingHistoryItem } from '../components/FeedingHistoryItem';
-import { feedingApi } from '../services/api';
-import { storage } from '../utils/storage';
+import { feedingApi, babyApi } from '../services/api';
 
 const { width } = Dimensions.get('window');
 
 export const FeedingHistoryScreen: React.FC = () => {
   const [feedings, setFeedings] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [baby, setBaby] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'BREASTFEEDING' | 'FORMULA'>('all');
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
       toValue: 1,
-      duration: 500,
+      duration: 400,
       useNativeDriver: true,
     }).start();
-  }, [stats]);
+  }, []);
 
   const loadData = async () => {
     try {
-      const babyId = await storage.getSelectedBaby();
-      if (!babyId) return;
+      const babiesResponse = await babyApi.getBabies();
+      const babies = babiesResponse.data;
 
-      const [feedingsRes, statsRes] = await Promise.all([
-        feedingApi.getAll(babyId, 50),
-        feedingApi.getStats(babyId, 7),
-      ]);
+      if (babies.length > 0) {
+        const currentBaby = babies[0];
+        setBaby(currentBaby);
 
-      setFeedings(feedingsRes.data.feedings);
-      setStats(statsRes.data);
+        const feedingsResponse = await feedingApi.getFeedings(currentBaby.id);
+        setFeedings(feedingsResponse.data);
+      }
     } catch (error) {
-      console.error('Error loading feedings:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+      console.error('Error loading data:', error);
     }
   };
 
@@ -59,133 +62,176 @@ export const FeedingHistoryScreen: React.FC = () => {
     }, [])
   );
 
-  const handleDelete = async (id: string) => {
-    Alert.alert('מחיקת האכלה', 'האם למחוק את ההאכלה?', [
-      { text: 'ביטול', style: 'cancel' },
-      {
-        text: 'מחק',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await feedingApi.delete(id);
-            setFeedings(feedings.filter((f) => f.id !== id));
-            loadData();
-          } catch (error) {
-            Alert.alert('שגיאה', 'לא הצלחנו למחוק');
-          }
-        },
-      },
-    ]);
-  };
-
-  const onRefresh = () => {
+  const onRefresh = async () => {
     setRefreshing(true);
-    loadData();
+    await loadData();
+    setRefreshing(false);
   };
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingEmoji}>🍼</Text>
-        <Text style={styles.loadingText}>טוען היסטוריה...</Text>
-      </View>
+  const handleDelete = async (id: string) => {
+    try {
+      await feedingApi.deleteFeeding(id);
+      await loadData();
+    } catch (error) {
+      console.error('Error deleting feeding:', error);
+    }
+  };
+
+  const filteredFeedings = filter === 'all'
+    ? feedings
+    : feedings.filter((f) => f.type === filter);
+
+  const getTodayStats = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayFeedings = feedings.filter(
+      (f) => new Date(f.time) >= today
     );
-  }
+    const breastfeedings = todayFeedings.filter(
+      (f) => f.type === 'BREASTFEEDING'
+    ).length;
+    const formulas = todayFeedings.filter((f) => f.type === 'FORMULA').length;
+    const totalAmount = todayFeedings.reduce(
+      (sum, f) => sum + (f.amountMl || 0),
+      0
+    );
+    return { total: todayFeedings.length, breastfeedings, formulas, totalAmount };
+  };
+
+  const stats = getTodayStats();
+
+  const renderItem = ({ item, index }: { item: any; index: number }) => {
+    const animValue = new Animated.Value(0);
+    Animated.timing(animValue, {
+      toValue: 1,
+      duration: 300,
+      delay: index * 50,
+      useNativeDriver: true,
+    }).start();
+
+    return (
+      <Animated.View
+        style={{
+          opacity: animValue,
+          transform: [
+            {
+              translateX: animValue.interpolate({
+                inputRange: [0, 1],
+                outputRange: [20, 0],
+              }),
+            },
+          ],
+        }}
+      >
+        <FeedingHistoryItem feeding={item} onDelete={handleDelete} />
+      </Animated.View>
+    );
+  };
 
   return (
-    <View style={styles.container}>
+    <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
+      <View style={styles.header}>
+        <View style={styles.statsGrid}>
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{stats.total}</Text>
+            <Text style={styles.statLabel}>סה"כ היום</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={[styles.statValue, { color: colors.feedingBreastfeeding }]}>
+              {stats.breastfeedings}
+            </Text>
+            <Text style={styles.statLabel}>הנקות</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={[styles.statValue, { color: colors.feedingFormula }]}>
+              {stats.formulas}
+            </Text>
+            <Text style={styles.statLabel}>בקבוקים</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={[styles.statValue, { color: colors.success }]}>
+              {stats.totalAmount}
+            </Text>
+            <Text style={styles.statLabel}>מ"ל</Text>
+          </View>
+        </View>
+
+        <View style={styles.filterRow}>
+          <FilterButton
+            label="הכל"
+            isActive={filter === 'all'}
+            onPress={() => setFilter('all')}
+          />
+          <FilterButton
+            label="הנקה"
+            isActive={filter === 'BREASTFEEDING'}
+            onPress={() => setFilter('BREASTFEEDING')}
+            color={colors.feedingBreastfeeding}
+          />
+          <FilterButton
+            label='תמ"ל'
+            isActive={filter === 'FORMULA'}
+            onPress={() => setFilter('FORMULA')}
+            color={colors.feedingFormula}
+          />
+        </View>
+      </View>
+
       <FlatList
-        data={feedings}
+        data={filteredFeedings}
+        renderItem={renderItem}
         keyExtractor={(item) => item.id}
-        renderItem={({ item, index }) => (
-          <Animated.View
-            style={{
-              opacity: fadeAnim,
-              transform: [
-                {
-                  translateX: fadeAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [50, 0],
-                  }),
-                },
-              ],
-            }}
-          >
-            <FeedingHistoryItem feeding={item} onDelete={handleDelete} />
-          </Animated.View>
-        )}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={styles.listContent}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={colors.primary}
             colors={[colors.primary]}
+            tintColor={colors.primary}
           />
         }
-        ListHeaderComponent={
-          stats && (
-            <Animated.View style={[styles.statsContainer, { opacity: fadeAnim }]}>
-              <View style={styles.statsHeader}>
-                <Text style={styles.statsIcon}>📊</Text>
-                <Text style={styles.statsTitle}>סטטיסטיקות (7 ימים)</Text>
-              </View>
-              <View style={styles.statsGrid}>
-                <StatBox
-                  icon="🍼"
-                  value={stats.totalFeedings || 0}
-                  label="האכלות"
-                  color="#FF69B4"
-                />
-                <StatBox
-                  icon="💧"
-                  value={`${stats.avgAmount || 0}`}
-                  label='ממוצע מ"ל'
-                  color="#4FC3F7"
-                />
-                <StatBox
-                  icon="🤱"
-                  value={stats.breastfeedings || 0}
-                  label="הנקות"
-                  color="#FFB74D"
-                />
-                <StatBox
-                  icon="🍶"
-                  value={stats.formulaFeedings || 0}
-                  label='תמ"ל'
-                  color="#81C784"
-                />
-              </View>
-            </Animated.View>
-          )
-        }
+        showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>🍼</Text>
-            <Text style={styles.emptyTitle}>עדיין אין האכלות</Text>
-            <Text style={styles.emptyText}>
-              התחל לרשום האכלות ותראה כאן את ההיסטוריה
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyIcon}>📋</Text>
+            <Text style={styles.emptyTitle}>אין האכלות עדיין</Text>
+            <Text style={styles.emptySubtitle}>
+              האכלות שתרשום יופיעו כאן
             </Text>
           </View>
         }
       />
-    </View>
+    </Animated.View>
   );
 };
 
-const StatBox: React.FC<{
-  icon: string;
-  value: string | number;
+const FilterButton: React.FC<{
   label: string;
-  color: string;
-}> = ({ icon, value, label, color }) => (
-  <View style={styles.statBox}>
-    <View style={[styles.statIconContainer, { backgroundColor: `${color}20` }]}>
-      <Text style={styles.statBoxIcon}>{icon}</Text>
-    </View>
-    <Text style={[styles.statValue, { color }]}>{value}</Text>
-    <Text style={styles.statLabel}>{label}</Text>
-  </View>
+  isActive: boolean;
+  onPress: () => void;
+  color?: string;
+}> = ({ label, isActive, onPress, color }) => (
+  <TouchableOpacity
+    style={[
+      styles.filterButton,
+      isActive && styles.filterButtonActive,
+      isActive && color && { backgroundColor: `${color}20`, borderColor: color },
+    ]}
+    onPress={onPress}
+  >
+    <Text
+      style={[
+        styles.filterButtonText,
+        isActive && styles.filterButtonTextActive,
+        isActive && color && { color },
+      ]}
+    >
+      {label}
+    </Text>
+  </TouchableOpacity>
 );
 
 const styles = StyleSheet.create({
@@ -193,92 +239,87 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-  },
-  loadingEmoji: {
-    fontSize: 60,
-    marginBottom: spacing.md,
-  },
-  loadingText: {
-    ...typography.body,
-    color: colors.textSecondary,
-  },
-  list: {
-    padding: spacing.md,
-    paddingBottom: spacing.xxl,
-  },
-  statsContainer: {
+  header: {
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.xl,
-    padding: spacing.lg,
-    marginBottom: spacing.lg,
-    ...shadows.md,
-  },
-  statsHeader: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  statsIcon: {
-    fontSize: 24,
-    marginLeft: spacing.sm,
-  },
-  statsTitle: {
-    ...typography.h3,
-    color: colors.text,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    ...shadows.sm,
   },
   statsGrid: {
     flexDirection: 'row-reverse',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  statBox: {
-    width: (width - spacing.md * 2 - spacing.lg * 2 - spacing.sm) / 2,
-    backgroundColor: colors.background,
-    borderRadius: borderRadius.lg,
-    padding: spacing.md,
+    justifyContent: 'space-around',
     alignItems: 'center',
+    paddingVertical: spacing.sm,
   },
-  statIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
+  statItem: {
     alignItems: 'center',
-    marginBottom: spacing.xs,
+    flex: 1,
   },
-  statBoxIcon: {
-    fontSize: 24,
+  statDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: colors.border,
   },
   statValue: {
     fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 2,
+    fontFamily: fonts.bold,
+    color: colors.primary,
   },
   statLabel: {
-    ...typography.caption,
+    fontSize: 12,
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+  },
+  filterRow: {
+    flexDirection: 'row-reverse',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  filterButton: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.background,
+    borderWidth: 2,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  filterButtonActive: {
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.primary,
+  },
+  filterButtonText: {
+    fontSize: 14,
+    fontFamily: fonts.medium,
     color: colors.textSecondary,
   },
-  emptyContainer: {
+  filterButtonTextActive: {
+    color: colors.primary,
+    fontFamily: fonts.semiBold,
+  },
+  listContent: {
+    padding: spacing.lg,
+    paddingBottom: spacing.xxl,
+  },
+  emptyState: {
     alignItems: 'center',
     paddingVertical: spacing.xxl,
   },
   emptyIcon: {
-    fontSize: 80,
-    marginBottom: spacing.lg,
+    fontSize: 64,
+    marginBottom: spacing.md,
   },
   emptyTitle: {
-    ...typography.h2,
+    ...typography.h3,
+    fontFamily: fonts.semiBold,
     color: colors.text,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
-  emptyText: {
+  emptySubtitle: {
     ...typography.body,
+    fontFamily: fonts.regular,
     color: colors.textSecondary,
     textAlign: 'center',
   },

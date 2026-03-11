@@ -1,6 +1,13 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, Dimensions } from 'react-native';
-import { colors } from '../utils/theme';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Animated,
+  Dimensions,
+  TouchableWithoutFeedback,
+} from 'react-native';
+import { colors, fonts, spacing } from '../utils/theme';
 
 const { width, height } = Dimensions.get('window');
 
@@ -13,37 +20,38 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
   const scaleAnim = useRef(new Animated.Value(0.3)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const bottleRotate = useRef(new Animated.Value(0)).current;
+  const canSkip = useRef(false);
 
   useEffect(() => {
     Animated.sequence([
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 1,
-          duration: 800,
+          duration: 600,
           useNativeDriver: true,
         }),
         Animated.spring(scaleAnim, {
           toValue: 1,
-          friction: 4,
+          friction: 5,
           tension: 40,
           useNativeDriver: true,
         }),
       ]),
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 500,
+        duration: 400,
         useNativeDriver: true,
       }),
       Animated.loop(
         Animated.sequence([
           Animated.timing(bottleRotate, {
             toValue: 1,
-            duration: 500,
+            duration: 400,
             useNativeDriver: true,
           }),
           Animated.timing(bottleRotate, {
             toValue: 0,
-            duration: 500,
+            duration: 400,
             useNativeDriver: true,
           }),
         ]),
@@ -51,70 +59,87 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
       ),
     ]).start();
 
+    setTimeout(() => {
+      canSkip.current = true;
+    }, 1000);
+
     const timer = setTimeout(() => {
       Animated.timing(fadeAnim, {
         toValue: 0,
         duration: 300,
         useNativeDriver: true,
       }).start(() => onFinish());
-    }, 3000);
+    }, 2500);
 
     return () => clearTimeout(timer);
   }, []);
 
+  const handlePress = () => {
+    if (canSkip.current) {
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => onFinish());
+    }
+  };
+
   const bottleRotation = bottleRotate.interpolate({
     inputRange: [0, 1],
-    outputRange: ['-15deg', '15deg'],
+    outputRange: ['-10deg', '10deg'],
   });
 
   return (
-    <View style={styles.container}>
-      <View style={styles.backgroundCircle1} />
-      <View style={styles.backgroundCircle2} />
-      <View style={styles.backgroundCircle3} />
-      
-      <Animated.View
-        style={[
-          styles.content,
-          {
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }],
-          },
-        ]}
-      >
-        <View style={styles.iconContainer}>
-          <Animated.Text
-            style={[
-              styles.bottleIcon,
-              { transform: [{ rotate: bottleRotation }] },
-            ]}
-          >
-            🍼
-          </Animated.Text>
-          <Text style={styles.babyIcon}>👶</Text>
-        </View>
+    <TouchableWithoutFeedback onPress={handlePress}>
+      <View style={styles.container}>
+        <View style={styles.backgroundCircle1} />
+        <View style={styles.backgroundCircle2} />
+        <View style={styles.backgroundCircle3} />
 
         <Animated.View
-          style={{
-            transform: [{ translateY: slideAnim }],
-            opacity: fadeAnim,
-          }}
+          style={[
+            styles.content,
+            {
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }],
+            },
+          ]}
         >
-          <Text style={styles.title}>Nili Baby</Text>
-          <Text style={styles.subtitle}>מערכת ניהול תינוקות</Text>
+          <View style={styles.iconContainer}>
+            <Animated.Text
+              style={[
+                styles.bottleIcon,
+                { transform: [{ rotate: bottleRotation }] },
+              ]}
+            >
+              🍼
+            </Animated.Text>
+            <Text style={styles.babyIcon}>👶</Text>
+          </View>
+
+          <Animated.View
+            style={{
+              transform: [{ translateY: slideAnim }],
+              opacity: fadeAnim,
+            }}
+          >
+            <Text style={styles.title}>Nili Baby</Text>
+            <Text style={styles.subtitle}>מערכת ניהול תינוקות</Text>
+          </Animated.View>
+
+          <View style={styles.features}>
+            <FeatureItem icon="🍼" text="ניהול האכלות" delay={0} />
+            <FeatureItem icon="⏰" text="תזכורות" delay={150} />
+            <FeatureItem icon="📅" text="תורים" delay={300} />
+          </View>
         </Animated.View>
 
-        <View style={styles.features}>
-          <FeatureItem icon="🍼" text="ניהול האכלות" delay={0} />
-          <FeatureItem icon="⏰" text="תזכורות" delay={200} />
-          <FeatureItem icon="📅" text="תורים" delay={400} />
-        </View>
-      </Animated.View>
-
-      <Animated.Text style={[styles.footer, { opacity: fadeAnim }]}>
-        עם אהבה לכל ההורים החדשים 💕
-      </Animated.Text>
-    </View>
+        <Animated.View style={[styles.footer, { opacity: fadeAnim }]}>
+          <Text style={styles.footerText}>עם אהבה לכל ההורים החדשים 💕</Text>
+          <Text style={styles.skipText}>לחץ לדילוג</Text>
+        </Animated.View>
+      </View>
+    </TouchableWithoutFeedback>
   );
 };
 
@@ -131,16 +156,16 @@ const FeatureItem: React.FC<{ icon: string; text: string; delay: number }> = ({
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 1,
-          duration: 400,
+          duration: 300,
           useNativeDriver: true,
         }),
         Animated.timing(slideAnim, {
           toValue: 0,
-          duration: 400,
+          duration: 300,
           useNativeDriver: true,
         }),
       ]).start();
-    }, 1000 + delay);
+    }, 800 + delay);
 
     return () => clearTimeout(timer);
   }, []);
@@ -201,59 +226,70 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   iconContainer: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.lg,
   },
   bottleIcon: {
-    fontSize: 60,
-    marginRight: 10,
+    fontSize: 56,
+    marginLeft: spacing.sm,
   },
   babyIcon: {
-    fontSize: 80,
+    fontSize: 72,
   },
   title: {
-    fontSize: 48,
-    fontWeight: 'bold',
+    fontSize: 44,
+    fontFamily: fonts.bold,
     color: colors.white,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.xs,
     textShadowColor: 'rgba(0, 0, 0, 0.2)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
   },
   subtitle: {
-    fontSize: 20,
+    fontSize: 18,
+    fontFamily: fonts.regular,
     color: 'rgba(255, 255, 255, 0.9)',
     textAlign: 'center',
-    marginBottom: 40,
+    marginBottom: spacing.xl,
   },
   features: {
-    marginTop: 20,
+    marginTop: spacing.md,
   },
   featureItem: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + 2,
     borderRadius: 30,
-    marginVertical: 8,
+    marginVertical: spacing.xs,
     minWidth: 180,
   },
   featureIcon: {
-    fontSize: 24,
-    marginLeft: 12,
+    fontSize: 22,
+    marginLeft: spacing.sm,
   },
   featureText: {
-    fontSize: 16,
+    fontSize: 15,
+    fontFamily: fonts.medium,
     color: colors.white,
-    fontWeight: '600',
   },
   footer: {
     position: 'absolute',
     bottom: 50,
-    fontSize: 16,
+    alignItems: 'center',
+  },
+  footerText: {
+    fontSize: 15,
+    fontFamily: fonts.regular,
     color: 'rgba(255, 255, 255, 0.8)',
+    marginBottom: spacing.sm,
+  },
+  skipText: {
+    fontSize: 12,
+    fontFamily: fonts.regular,
+    color: 'rgba(255, 255, 255, 0.5)',
   },
 });

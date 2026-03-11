@@ -1,144 +1,133 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
-  Alert,
+  RefreshControl,
   Modal,
-  ScrollView,
   TouchableOpacity,
   Animated,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { colors, spacing, typography, borderRadius, shadows } from '../utils/theme';
+import {
+  colors,
+  spacing,
+  borderRadius,
+  typography,
+  shadows,
+  fonts,
+  iconContainerSizes,
+} from '../utils/theme';
+import { AppointmentItem } from '../components/AppointmentItem';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
-import { AppointmentItem } from '../components/AppointmentItem';
-import { appointmentApi } from '../services/api';
-import { storage } from '../utils/storage';
+import { appointmentApi, babyApi } from '../services/api';
 
-const QUICK_APPOINTMENTS = [
-  { title: 'טיפת חלב', icon: '🏥' },
-  { title: 'רופא ילדים', icon: '👨‍⚕️' },
-  { title: 'חיסון', icon: '💉' },
-  { title: 'בדיקת שמיעה', icon: '👂' },
+interface QuickAppointment {
+  title: string;
+  icon: string;
+  color: string;
+}
+
+const QUICK_APPOINTMENTS: QuickAppointment[] = [
+  { title: 'טיפת חלב', icon: '🍼', color: colors.appointmentMilkDrop },
+  { title: 'רופא ילדים', icon: '👨‍⚕️', color: colors.appointmentDoctor },
+  { title: 'חיסון', icon: '💉', color: colors.appointmentVaccine },
+  { title: 'בדיקת שמיעה', icon: '👂', color: colors.appointmentDefault },
 ];
 
 export const AppointmentsScreen: React.FC = () => {
   const [appointments, setAppointments] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [baby, setBaby] = useState<any>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDate, setNewDate] = useState('');
   const [newTime, setNewTime] = useState('');
   const [newLocation, setNewLocation] = useState('');
   const [newNotes, setNewNotes] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [appointments]);
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
-  const loadAppointments = async () => {
+  const loadData = async () => {
     try {
-      const babyId = await storage.getSelectedBaby();
-      if (!babyId) return;
+      const babiesResponse = await babyApi.getBabies();
+      const babies = babiesResponse.data;
 
-      const res = await appointmentApi.getAll(babyId, true);
-      setAppointments(res.data.appointments);
+      if (babies.length > 0) {
+        const currentBaby = babies[0];
+        setBaby(currentBaby);
+
+        const appointmentsResponse = await appointmentApi.getAppointments(
+          currentBaby.id
+        );
+        setAppointments(appointmentsResponse.data);
+      }
     } catch (error) {
-      console.error('Error loading appointments:', error);
-    } finally {
-      setLoading(false);
+      console.error('Error loading data:', error);
     }
   };
 
   useFocusEffect(
     useCallback(() => {
-      loadAppointments();
+      loadData();
     }, [])
   );
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  };
+
   const handleDelete = async (id: string) => {
-    Alert.alert('מחיקת תור', 'האם למחוק את התור?', [
-      { text: 'ביטול', style: 'cancel' },
-      {
-        text: 'מחק',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await appointmentApi.delete(id);
-            setAppointments(appointments.filter((a) => a.id !== id));
-          } catch (error) {
-            Alert.alert('שגיאה', 'לא הצלחנו למחוק');
-          }
-        },
-      },
-    ]);
+    try {
+      await appointmentApi.deleteAppointment(id);
+      await loadData();
+    } catch (error) {
+      console.error('Error deleting appointment:', error);
+    }
   };
 
   const handleAddAppointment = async () => {
-    if (!newTitle.trim() || !newDate.trim() || !newTime.trim()) {
-      Alert.alert('שגיאה', 'נא למלא כותרת, תאריך ושעה');
-      return;
-    }
+    if (!baby || !newTitle.trim() || !newDate.trim() || !newTime.trim()) return;
 
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!dateRegex.test(newDate)) {
-      Alert.alert('שגיאה', 'פורמט תאריך לא תקין (YYYY-MM-DD)');
-      return;
-    }
-
-    const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
-    if (!timeRegex.test(newTime)) {
-      Alert.alert('שגיאה', 'פורמט שעה לא תקין (HH:MM)');
-      return;
-    }
-
-    setSubmitting(true);
+    setLoading(true);
     try {
-      const babyId = await storage.getSelectedBaby();
-      if (!babyId) return;
-
-      const datetime = `${newDate}T${newTime}:00`;
-
-      const res = await appointmentApi.create({
-        babyId,
-        title: newTitle,
-        datetime,
-        location: newLocation || undefined,
-        notes: newNotes || undefined,
+      const datetime = new Date(`${newDate}T${newTime}`);
+      await appointmentApi.addAppointment({
+        babyId: baby.id,
+        title: newTitle.trim(),
+        datetime: datetime.toISOString(),
+        location: newLocation.trim() || undefined,
+        notes: newNotes.trim() || undefined,
       });
-
-      setAppointments(
-        [...appointments, res.data.appointment].sort(
-          (a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime()
-        )
-      );
-
-      setModalVisible(false);
       resetForm();
-      Alert.alert('✓ נוסף', 'התור נוסף בהצלחה');
+      setModalVisible(false);
+      await loadData();
     } catch (error) {
-      Alert.alert('שגיאה', 'לא הצלחנו להוסיף תור');
+      console.error('Error adding appointment:', error);
     } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
+  };
+
+  const handleQuickAdd = (appointment: QuickAppointment) => {
+    setNewTitle(appointment.title);
+    setModalVisible(true);
   };
 
   const resetForm = () => {
@@ -149,76 +138,91 @@ export const AppointmentsScreen: React.FC = () => {
     setNewNotes('');
   };
 
-  const handleQuickAdd = (title: string) => {
-    setNewTitle(title);
-    setModalVisible(true);
-  };
-
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingEmoji}>📅</Text>
-        <Text style={styles.loadingText}>טוען תורים...</Text>
-      </View>
-    );
-  }
+  const upcomingAppointments = appointments.filter(
+    (a) => new Date(a.datetime) > new Date()
+  );
+  const pastAppointments = appointments.filter(
+    (a) => new Date(a.datetime) <= new Date()
+  );
 
   return (
-    <View style={styles.container}>
+    <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
+      <View style={styles.header}>
+        <View style={styles.statsRow}>
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{upcomingAppointments.length}</Text>
+            <Text style={styles.statLabel}>תורים קרובים</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={[styles.statValue, { color: colors.textLight }]}>
+              {pastAppointments.length}
+            </Text>
+            <Text style={styles.statLabel}>תורים שעברו</Text>
+          </View>
+        </View>
+      </View>
+
       <FlatList
         data={appointments}
-        keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <Animated.View
-            style={{
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            }}
-          >
-            <AppointmentItem appointment={item} onDelete={handleDelete} />
-          </Animated.View>
+          <AppointmentItem appointment={item} onDelete={handleDelete} />
         )}
-        contentContainerStyle={styles.list}
-        ListHeaderComponent={
-          <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
-            <View style={styles.headerContent}>
-              <View style={styles.headerLeft}>
-                <Text style={styles.headerIcon}>📅</Text>
-                <View>
-                  <Text style={styles.title}>תורים</Text>
-                  <Text style={styles.subtitle}>
-                    {appointments.length} תורים קרובים
-                  </Text>
-                </View>
-              </View>
-              <Button
-                title="➕ הוסף"
-                onPress={() => setModalVisible(true)}
-                size="small"
-              />
-            </View>
-          </Animated.View>
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
         }
-        ListEmptyComponent={
-          <Animated.View style={[styles.emptyContainer, { opacity: fadeAnim }]}>
-            <Text style={styles.emptyIcon}>📅</Text>
-            <Text style={styles.emptyTitle}>אין תורים קרובים</Text>
-            <Text style={styles.emptyText}>הוסף תור חדש:</Text>
-            <View style={styles.quickButtons}>
-              {QUICK_APPOINTMENTS.map((item, index) => (
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={
+          <View style={styles.quickAddSection}>
+            <Text style={styles.sectionTitle}>הוספה מהירה</Text>
+            <View style={styles.quickAddGrid}>
+              {QUICK_APPOINTMENTS.map((appointment, index) => (
                 <TouchableOpacity
                   key={index}
-                  style={styles.quickButton}
-                  onPress={() => handleQuickAdd(item.title)}
+                  style={[
+                    styles.quickAddButton,
+                    { borderRightColor: appointment.color },
+                  ]}
+                  onPress={() => handleQuickAdd(appointment)}
                 >
-                  <Text style={styles.quickIcon}>{item.icon}</Text>
-                  <Text style={styles.quickTitle}>{item.title}</Text>
+                  <View
+                    style={[
+                      styles.quickAddIcon,
+                      { backgroundColor: `${appointment.color}20` },
+                    ]}
+                  >
+                    <Text style={styles.quickAddEmoji}>{appointment.icon}</Text>
+                  </View>
+                  <Text style={styles.quickAddLabel}>{appointment.title}</Text>
                 </TouchableOpacity>
               ))}
             </View>
-          </Animated.View>
+          </View>
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyIcon}>📅</Text>
+            <Text style={styles.emptyTitle}>אין תורים</Text>
+            <Text style={styles.emptySubtitle}>
+              הוסף תורים לרופא, טיפת חלב ועוד
+            </Text>
+          </View>
         }
       />
+
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => setModalVisible(true)}
+      >
+        <Text style={styles.fabIcon}>+</Text>
+      </TouchableOpacity>
 
       <Modal
         visible={modalVisible}
@@ -226,41 +230,51 @@ export const AppointmentsScreen: React.FC = () => {
         transparent
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <ScrollView
-            contentContainerStyle={styles.modalScrollContent}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalIcon}>📅</Text>
-                <Text style={styles.modalTitle}>תור חדש</Text>
-              </View>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>תור חדש</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  resetForm();
+                  setModalVisible(false);
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={styles.closeButton}>✕</Text>
+              </TouchableOpacity>
+            </View>
 
+            <ScrollView keyboardShouldPersistTaps="handled">
               <Input
-                label="כותרת"
+                label="סוג התור"
                 value={newTitle}
                 onChangeText={setNewTitle}
                 placeholder="לדוגמה: טיפת חלב"
-                icon="📝"
+                icon="🏥"
               />
 
               <Input
-                label="תאריך (YYYY-MM-DD)"
+                label="תאריך"
                 value={newDate}
                 onChangeText={setNewDate}
-                placeholder="2026-03-15"
+                placeholder="YYYY-MM-DD (לדוגמה: 2026-03-15)"
                 keyboardType="numbers-and-punctuation"
-                icon="📆"
+                icon="📅"
+                hint="הזן תאריך בפורמט שנה-חודש-יום"
               />
 
               <Input
-                label="שעה (HH:MM)"
+                label="שעה"
                 value={newTime}
                 onChangeText={setNewTime}
-                placeholder="10:00"
+                placeholder="HH:MM (לדוגמה: 10:30)"
                 keyboardType="numbers-and-punctuation"
                 icon="🕐"
+                hint="הזן שעה בפורמט 24 שעות"
               />
 
               <Input
@@ -275,33 +289,23 @@ export const AppointmentsScreen: React.FC = () => {
                 label="הערות (אופציונלי)"
                 value={newNotes}
                 onChangeText={setNewNotes}
-                placeholder="הערות נוספות"
+                placeholder="הערות נוספות..."
                 multiline
-                icon="📋"
+                icon="📝"
               />
 
-              <View style={styles.modalActions}>
-                <Button
-                  title="ביטול"
-                  onPress={() => {
-                    setModalVisible(false);
-                    resetForm();
-                  }}
-                  variant="outline"
-                  style={styles.modalButton}
-                />
-                <Button
-                  title="הוסף"
-                  onPress={handleAddAppointment}
-                  loading={submitting}
-                  style={styles.modalButton}
-                />
-              </View>
-            </View>
-          </ScrollView>
-        </View>
+              <Button
+                title="הוסף תור"
+                onPress={handleAddAppointment}
+                loading={loading}
+                disabled={!newTitle.trim() || !newDate.trim() || !newTime.trim()}
+                style={styles.addButton}
+              />
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
-    </View>
+    </Animated.View>
   );
 };
 
@@ -310,127 +314,147 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-  },
-  loadingEmoji: {
-    fontSize: 60,
-    marginBottom: spacing.md,
-  },
-  loadingText: {
-    ...typography.body,
-    color: colors.textSecondary,
-  },
-  list: {
-    padding: spacing.md,
-    paddingBottom: spacing.xxl,
-  },
   header: {
-    marginBottom: spacing.lg,
-  },
-  headerContent: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     backgroundColor: colors.surface,
-    padding: spacing.md,
-    borderRadius: borderRadius.xl,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     ...shadows.sm,
   },
-  headerLeft: {
+  statsRow: {
     flexDirection: 'row-reverse',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  headerIcon: {
-    fontSize: 40,
-    marginLeft: spacing.md,
-  },
-  title: {
-    ...typography.h2,
-    color: colors.text,
-  },
-  subtitle: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-  },
-  emptyContainer: {
+  statItem: {
     alignItems: 'center',
-    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.xl,
   },
-  emptyIcon: {
-    fontSize: 80,
-    marginBottom: spacing.lg,
+  statDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: colors.border,
   },
-  emptyTitle: {
-    ...typography.h2,
-    color: colors.text,
-    marginBottom: spacing.sm,
+  statValue: {
+    fontSize: 28,
+    fontFamily: fonts.bold,
+    color: colors.primary,
   },
-  emptyText: {
-    ...typography.body,
+  statLabel: {
+    fontSize: 14,
+    fontFamily: fonts.regular,
     color: colors.textSecondary,
+    marginTop: spacing.xs,
+  },
+  listContent: {
+    padding: spacing.lg,
+    paddingBottom: 100,
+  },
+  quickAddSection: {
     marginBottom: spacing.lg,
   },
-  quickButtons: {
+  sectionTitle: {
+    ...typography.h3,
+    fontFamily: fonts.semiBold,
+    color: colors.text,
+    marginBottom: spacing.md,
+    textAlign: 'right',
+  },
+  quickAddGrid: {
     flexDirection: 'row-reverse',
     flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
-  quickButton: {
-    alignItems: 'center',
+  quickAddButton: {
+    width: '48%',
     backgroundColor: colors.surface,
-    padding: spacing.md,
     borderRadius: borderRadius.lg,
-    width: 100,
+    padding: spacing.md,
+    alignItems: 'center',
+    borderRightWidth: 4,
     ...shadows.sm,
   },
-  quickIcon: {
-    fontSize: 32,
+  quickAddIcon: {
+    width: iconContainerSizes.md,
+    height: iconContainerSizes.md,
+    borderRadius: iconContainerSizes.md / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+  },
+  quickAddEmoji: {
+    fontSize: 24,
+  },
+  quickAddLabel: {
+    fontSize: 14,
+    fontFamily: fonts.semiBold,
+    color: colors.text,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: spacing.xxl,
+  },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: spacing.md,
+  },
+  emptyTitle: {
+    ...typography.h3,
+    fontFamily: fonts.semiBold,
+    color: colors.text,
     marginBottom: spacing.xs,
   },
-  quickTitle: {
-    ...typography.bodySmall,
-    color: colors.text,
+  emptySubtitle: {
+    ...typography.body,
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
     textAlign: 'center',
+  },
+  fab: {
+    position: 'absolute',
+    bottom: spacing.xl,
+    left: spacing.xl,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.lg,
+  },
+  fabIcon: {
+    fontSize: 32,
+    color: colors.white,
+    fontFamily: fonts.bold,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-  },
-  modalScrollContent: {
-    padding: spacing.lg,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
   },
   modalContent: {
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.xl,
+    borderTopLeftRadius: borderRadius.xl,
+    borderTopRightRadius: borderRadius.xl,
     padding: spacing.lg,
-    ...shadows.lg,
+    maxHeight: '90%',
   },
   modalHeader: {
     flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: spacing.lg,
-  },
-  modalIcon: {
-    fontSize: 32,
-    marginLeft: spacing.sm,
   },
   modalTitle: {
     ...typography.h2,
+    fontFamily: fonts.bold,
     color: colors.text,
   },
-  modalActions: {
-    flexDirection: 'row-reverse',
-    gap: spacing.md,
-    marginTop: spacing.md,
+  closeButton: {
+    fontSize: 24,
+    color: colors.textSecondary,
   },
-  modalButton: {
-    flex: 1,
+  addButton: {
+    marginTop: spacing.md,
+    marginBottom: spacing.lg,
   },
 });

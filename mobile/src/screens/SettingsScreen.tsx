@@ -1,19 +1,27 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  Alert,
-  TextInput,
-  Animated,
   TouchableOpacity,
+  Alert,
+  Animated,
 } from 'react-native';
-import { colors, spacing, typography, borderRadius, shadows } from '../utils/theme';
-import { Button } from '../components/Button';
+import { useFocusEffect } from '@react-navigation/native';
+import {
+  colors,
+  spacing,
+  borderRadius,
+  typography,
+  shadows,
+  fonts,
+  iconContainerSizes,
+} from '../utils/theme';
 import { Card } from '../components/Card';
+import { Button } from '../components/Button';
 import { Input } from '../components/Input';
-import { babyApi } from '../services/api';
+import { babyApi, userApi } from '../services/api';
 import { storage } from '../utils/storage';
 
 interface SettingsScreenProps {
@@ -26,253 +34,236 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onLogout,
 }) => {
   const [baby, setBaby] = useState<any>(null);
-  const [feedingInterval, setFeedingInterval] = useState('180');
-  const [targetAmount, setTargetAmount] = useState('120');
+  const [user, setUser] = useState<any>(null);
   const [shareEmail, setShareEmail] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [sharing, setSharing] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [sharedUsers, setSharedUsers] = useState<any[]>([]);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
-    loadBaby();
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
   }, []);
 
-  const loadBaby = async () => {
+  const loadData = async () => {
     try {
-      const babyId = await storage.getSelectedBaby();
-      if (!babyId) return;
+      const userData = await storage.getUser();
+      setUser(userData);
 
-      const res = await babyApi.getOne(babyId);
-      setBaby(res.data.baby);
-      setFeedingInterval(res.data.baby.feedingIntervalMinutes.toString());
-      setTargetAmount(res.data.baby.targetAmountMl.toString());
+      const babiesResponse = await babyApi.getBabies();
+      const babies = babiesResponse.data;
+
+      if (babies.length > 0) {
+        setBaby(babies[0]);
+        if (babies[0].users) {
+          setSharedUsers(babies[0].users);
+        }
+      }
     } catch (error) {
-      console.error('Error loading baby:', error);
+      console.error('Error loading data:', error);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
+
+  const handleShare = async () => {
+    if (!baby || !shareEmail.trim()) return;
+
+    setLoading(true);
+    try {
+      await babyApi.shareBaby(baby.id, shareEmail.trim());
+      setShareEmail('');
+      Alert.alert('הצלחה', 'הגישה שותפה בהצלחה');
+      await loadData();
+    } catch (error: any) {
+      Alert.alert('שגיאה', error.response?.data?.error || 'שגיאה בשיתוף');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSave = async () => {
-    if (!baby) return;
-
-    const interval = parseInt(feedingInterval);
-    const amount = parseInt(targetAmount);
-
-    if (isNaN(interval) || interval < 30 || interval > 480) {
-      Alert.alert('שגיאה', 'מרווח האכלות חייב להיות בין 30 ל-480 דקות');
-      return;
-    }
-
-    if (isNaN(amount) || amount < 10 || amount > 500) {
-      Alert.alert('שגיאה', 'כמות יעד חייבת להיות בין 10 ל-500 מ"ל');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      await babyApi.update(baby.id, {
-        feedingIntervalMinutes: interval,
-        targetAmountMl: amount,
-      });
-      Alert.alert('✓ נשמר', 'ההגדרות עודכנו בהצלחה');
-    } catch (error) {
-      Alert.alert('שגיאה', 'לא הצלחנו לשמור');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleShare = async () => {
-    if (!baby || !shareEmail.trim()) {
-      Alert.alert('שגיאה', 'נא להזין אימייל');
-      return;
-    }
-
-    setSharing(true);
-    try {
-      await babyApi.share(baby.id, shareEmail);
-      Alert.alert('✓ הצלחה', 'התינוק שותף בהצלחה');
-      setShareEmail('');
-      loadBaby();
-    } catch (error: any) {
-      Alert.alert('שגיאה', error.response?.data?.error || 'לא הצלחנו לשתף');
-    } finally {
-      setSharing(false);
-    }
-  };
-
   const handleLogout = () => {
-    Alert.alert('התנתקות', 'האם להתנתק?', [
+    Alert.alert('התנתקות', 'האם אתה בטוח שברצונך להתנתק?', [
       { text: 'ביטול', style: 'cancel' },
       {
         text: 'התנתק',
         style: 'destructive',
         onPress: async () => {
-          await storage.clearAll();
+          await storage.clear();
           onLogout();
         },
       },
     ]);
   };
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingEmoji}>⚙️</Text>
-        <Text style={styles.loadingText}>טוען הגדרות...</Text>
-      </View>
-    );
-  }
-
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      <Animated.View
-        style={{
-          opacity: fadeAnim,
-          transform: [{ translateY: slideAnim }],
-        }}
+    <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.header}>
-          <Text style={styles.headerIcon}>⚙️</Text>
-          <Text style={styles.headerTitle}>הגדרות</Text>
-        </View>
-
-        <SettingsSection icon="🍼" title="הגדרות האכלה">
-          <View style={styles.settingItem}>
-            <View style={styles.settingInfo}>
-              <Text style={styles.settingLabel}>מרווח בין האכלות</Text>
-              <Text style={styles.settingHint}>דקות</Text>
+        <SettingsSection title="פרטי משתמש" icon="👤">
+          <View style={styles.userInfo}>
+            <View style={styles.userAvatar}>
+              <Text style={styles.userAvatarEmoji}>👤</Text>
             </View>
-            <View style={styles.settingInputContainer}>
-              <TextInput
-                style={styles.settingInput}
-                value={feedingInterval}
-                onChangeText={setFeedingInterval}
-                keyboardType="number-pad"
-                placeholder="180"
-              />
+            <View style={styles.userDetails}>
+              <Text style={styles.userName}>{user?.name || 'משתמש'}</Text>
+              <Text style={styles.userEmail}>{user?.email || ''}</Text>
             </View>
           </View>
-
-          <View style={styles.divider} />
-
-          <View style={styles.settingItem}>
-            <View style={styles.settingInfo}>
-              <Text style={styles.settingLabel}>כמות יעד</Text>
-              <Text style={styles.settingHint}>מ"ל</Text>
-            </View>
-            <View style={styles.settingInputContainer}>
-              <TextInput
-                style={styles.settingInput}
-                value={targetAmount}
-                onChangeText={setTargetAmount}
-                keyboardType="number-pad"
-                placeholder="120"
-              />
-            </View>
-          </View>
-
-          <Button
-            title="💾 שמור הגדרות"
-            onPress={handleSave}
-            loading={saving}
-            style={styles.saveButton}
-          />
         </SettingsSection>
 
-        <SettingsSection icon="👥" title="שיתוף עם בן/בת זוג">
-          {baby?.users && baby.users.length > 1 && (
-            <View style={styles.sharedWith}>
-              <Text style={styles.sharedLabel}>משותף עם:</Text>
-              {baby.users.map((u: any) => (
-                <View key={u.user.id} style={styles.sharedUserRow}>
-                  <Text style={styles.sharedUserIcon}>👤</Text>
-                  <View style={styles.sharedUserInfo}>
-                    <Text style={styles.sharedUserName}>{u.user.name}</Text>
-                    <Text style={styles.sharedUserEmail}>{u.user.email}</Text>
-                  </View>
+        {baby && (
+          <>
+            <SettingsSection title="פרטי התינוק" icon="👶">
+              <SettingsRow
+                icon="👶"
+                label="שם"
+                value={baby.name}
+              />
+              <SettingsRow
+                icon="🎂"
+                label="תאריך לידה"
+                value={new Date(baby.birthDate).toLocaleDateString('he-IL')}
+              />
+              <SettingsRow
+                icon="⏱️"
+                label="מרווח האכלות"
+                value={`${baby.feedingIntervalHours} שעות`}
+              />
+              <SettingsRow
+                icon="🎯"
+                label="יעד להאכלה"
+                value={`${baby.targetAmountMl || 120} מ"ל`}
+              />
+              <SettingsRow
+                icon="🔔"
+                label="תזכורת לפני"
+                value={`${baby.reminderMinutesBefore || 10} דקות`}
+              />
+            </SettingsSection>
+
+            <SettingsSection title="שיתוף גישה" icon="👥">
+              <Text style={styles.shareDescription}>
+                שתף גישה לתינוק עם בן/בת זוג או מטפלת
+              </Text>
+
+              <Input
+                label="אימייל לשיתוף"
+                value={shareEmail}
+                onChangeText={setShareEmail}
+                placeholder="הכנס אימייל"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                icon="📧"
+              />
+
+              <Button
+                title="שתף גישה"
+                onPress={handleShare}
+                loading={loading}
+                disabled={!shareEmail.trim()}
+                variant="secondary"
+                style={styles.shareButton}
+              />
+
+              {sharedUsers.length > 0 && (
+                <View style={styles.sharedUsersSection}>
+                  <Text style={styles.sharedUsersTitle}>משתמשים עם גישה</Text>
+                  {sharedUsers.map((sharedUser, index) => (
+                    <View key={index} style={styles.sharedUserItem}>
+                      <View style={styles.sharedUserAvatar}>
+                        <Text style={styles.sharedUserEmoji}>👤</Text>
+                      </View>
+                      <View style={styles.sharedUserInfo}>
+                        <Text style={styles.sharedUserName}>
+                          {sharedUser.name}
+                        </Text>
+                        <Text style={styles.sharedUserEmail}>
+                          {sharedUser.email}
+                        </Text>
+                      </View>
+                      {sharedUser.id === user?.id && (
+                        <View style={styles.youBadge}>
+                          <Text style={styles.youBadgeText}>אתה</Text>
+                        </View>
+                      )}
+                    </View>
+                  ))}
                 </View>
-              ))}
-            </View>
-          )}
+              )}
+            </SettingsSection>
+          </>
+        )}
 
-          <Input
-            label="אימייל של בן/בת הזוג"
-            value={shareEmail}
-            onChangeText={setShareEmail}
-            placeholder="partner@email.com"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            icon="📧"
-          />
-
-          <Button
-            title="🔗 שתף"
-            onPress={handleShare}
-            loading={sharing}
-            variant="secondary"
-          />
-        </SettingsSection>
-
-        <SettingsSection icon="👶" title="ניהול תינוקות">
+        <SettingsSection title="פעולות" icon="⚡">
           <TouchableOpacity
-            style={styles.menuItem}
+            style={styles.actionButton}
             onPress={() => navigation.navigate('AddBaby')}
           >
-            <Text style={styles.menuIcon}>➕</Text>
-            <Text style={styles.menuText}>הוסף תינוק</Text>
-            <Text style={styles.menuArrow}>←</Text>
+            <View style={styles.actionIcon}>
+              <Text style={styles.actionEmoji}>➕</Text>
+            </View>
+            <Text style={styles.actionLabel}>הוסף תינוק</Text>
+            <Text style={styles.actionArrow}>‹</Text>
           </TouchableOpacity>
         </SettingsSection>
 
-        <SettingsSection icon="🚪" title="חשבון">
+        <View style={styles.logoutSection}>
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
             <Text style={styles.logoutIcon}>🚪</Text>
             <Text style={styles.logoutText}>התנתק</Text>
           </TouchableOpacity>
-        </SettingsSection>
+        </View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Nili Baby v1.0.0</Text>
-          <Text style={styles.footerSubtext}>עם אהבה לכל ההורים 💕</Text>
+          <Text style={styles.footerText}>Nili Baby v1.0</Text>
+          <Text style={styles.footerSubtext}>עם אהבה לכל ההורים החדשים 💕</Text>
         </View>
-      </Animated.View>
-    </ScrollView>
+      </ScrollView>
+    </Animated.View>
   );
 };
 
 const SettingsSection: React.FC<{
-  icon: string;
   title: string;
+  icon: string;
   children: React.ReactNode;
-}> = ({ icon, title, children }) => (
-  <Card style={styles.section}>
+}> = ({ title, icon, children }) => (
+  <View style={styles.section}>
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionIcon}>{icon}</Text>
       <Text style={styles.sectionTitle}>{title}</Text>
     </View>
-    {children}
-  </Card>
+    <Card variant="default" padding="md">
+      {children}
+    </Card>
+  </View>
+);
+
+const SettingsRow: React.FC<{
+  icon: string;
+  label: string;
+  value: string;
+}> = ({ icon, label, value }) => (
+  <View style={styles.settingsRow}>
+    <View style={styles.settingsRowLeft}>
+      <Text style={styles.settingsRowIcon}>{icon}</Text>
+      <Text style={styles.settingsRowLabel}>{label}</Text>
+    </View>
+    <Text style={styles.settingsRowValue}>{value}</Text>
+  </View>
 );
 
 const styles = StyleSheet.create({
@@ -280,166 +271,203 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  content: {
-    padding: spacing.md,
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: spacing.lg,
     paddingBottom: spacing.xxl,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-  },
-  loadingEmoji: {
-    fontSize: 60,
-    marginBottom: spacing.md,
-  },
-  loadingText: {
-    ...typography.body,
-    color: colors.textSecondary,
-  },
-  header: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.lg,
-  },
-  headerIcon: {
-    fontSize: 32,
-    marginLeft: spacing.sm,
-  },
-  headerTitle: {
-    ...typography.h1,
-    color: colors.text,
-  },
   section: {
-    marginBottom: spacing.md,
+    marginBottom: spacing.lg,
   },
   sectionHeader: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    marginBottom: spacing.md,
-    paddingBottom: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    marginBottom: spacing.sm,
   },
   sectionIcon: {
-    fontSize: 24,
+    fontSize: 20,
     marginLeft: spacing.sm,
   },
   sectionTitle: {
     ...typography.h3,
+    fontFamily: fonts.semiBold,
     color: colors.text,
   },
-  settingItem: {
+  userInfo: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+  },
+  userAvatar: {
+    width: iconContainerSizes.lg,
+    height: iconContainerSizes.lg,
+    borderRadius: iconContainerSizes.lg / 2,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: spacing.md,
+  },
+  userAvatarEmoji: {
+    fontSize: 28,
+  },
+  userDetails: {
+    flex: 1,
+  },
+  userName: {
+    ...typography.body,
+    fontFamily: fonts.bold,
+    color: colors.text,
+    textAlign: 'right',
+  },
+  userEmail: {
+    ...typography.bodySmall,
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
+    textAlign: 'right',
+  },
+  settingsRow: {
     flexDirection: 'row-reverse',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
-  settingInfo: {
-    flex: 1,
-    alignItems: 'flex-end',
+  settingsRowLeft: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
   },
-  settingLabel: {
+  settingsRowIcon: {
+    fontSize: 18,
+    marginLeft: spacing.sm,
+  },
+  settingsRowLabel: {
     ...typography.body,
+    fontFamily: fonts.regular,
     color: colors.text,
-    fontWeight: '600',
   },
-  settingHint: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  settingInputContainer: {
-    backgroundColor: colors.secondaryLight,
-    borderRadius: borderRadius.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    minWidth: 100,
-  },
-  settingInput: {
-    fontSize: 20,
-    fontWeight: 'bold',
+  settingsRowValue: {
+    ...typography.body,
+    fontFamily: fonts.semiBold,
     color: colors.primary,
-    textAlign: 'center',
   },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: spacing.sm,
-  },
-  saveButton: {
-    marginTop: spacing.md,
-  },
-  sharedWith: {
-    backgroundColor: colors.secondaryLight,
-    borderRadius: borderRadius.lg,
-    padding: spacing.md,
+  shareDescription: {
+    ...typography.bodySmall,
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
+    textAlign: 'right',
     marginBottom: spacing.md,
   },
-  sharedLabel: {
+  shareButton: {
+    marginTop: spacing.sm,
+  },
+  sharedUsersSection: {
+    marginTop: spacing.lg,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  sharedUsersTitle: {
     ...typography.bodySmall,
-    color: colors.textSecondary,
+    fontFamily: fonts.semiBold,
+    color: colors.text,
     textAlign: 'right',
     marginBottom: spacing.sm,
   },
-  sharedUserRow: {
+  sharedUserItem: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.sm,
   },
-  sharedUserIcon: {
-    fontSize: 24,
+  sharedUserAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginLeft: spacing.sm,
+  },
+  sharedUserEmoji: {
+    fontSize: 20,
   },
   sharedUserInfo: {
     flex: 1,
-    alignItems: 'flex-end',
   },
   sharedUserName: {
-    ...typography.body,
+    ...typography.bodySmall,
+    fontFamily: fonts.semiBold,
     color: colors.text,
-    fontWeight: '600',
+    textAlign: 'right',
   },
   sharedUserEmail: {
     ...typography.caption,
+    fontFamily: fonts.regular,
     color: colors.textSecondary,
-  },
-  menuItem: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-  },
-  menuIcon: {
-    fontSize: 24,
-    marginLeft: spacing.md,
-  },
-  menuText: {
-    ...typography.body,
-    color: colors.text,
-    flex: 1,
     textAlign: 'right',
   },
-  menuArrow: {
-    fontSize: 18,
-    color: colors.textSecondary,
+  youBadge: {
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: borderRadius.full,
+  },
+  youBadgeText: {
+    fontSize: 10,
+    fontFamily: fonts.semiBold,
+    color: colors.primary,
+  },
+  actionButton: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+  },
+  actionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.secondaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: spacing.md,
+  },
+  actionEmoji: {
+    fontSize: 20,
+  },
+  actionLabel: {
+    flex: 1,
+    ...typography.body,
+    fontFamily: fonts.medium,
+    color: colors.text,
+    textAlign: 'right',
+  },
+  actionArrow: {
+    fontSize: 24,
+    color: colors.textLight,
+    fontFamily: fonts.regular,
+  },
+  logoutSection: {
+    marginTop: spacing.lg,
   },
   logoutButton: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: spacing.md,
     backgroundColor: '#FFF0F0',
+    paddingVertical: spacing.md,
     borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.error,
   },
   logoutIcon: {
-    fontSize: 24,
+    fontSize: 20,
     marginLeft: spacing.sm,
   },
   logoutText: {
     ...typography.body,
+    fontFamily: fonts.semiBold,
     color: colors.error,
-    fontWeight: '600',
   },
   footer: {
     alignItems: 'center',
@@ -448,10 +476,12 @@ const styles = StyleSheet.create({
   },
   footerText: {
     ...typography.bodySmall,
-    color: colors.textSecondary,
+    fontFamily: fonts.medium,
+    color: colors.textLight,
   },
   footerSubtext: {
     ...typography.caption,
+    fontFamily: fonts.regular,
     color: colors.textLight,
     marginTop: spacing.xs,
   },

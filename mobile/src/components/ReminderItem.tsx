@@ -7,7 +7,15 @@ import {
   Switch,
   Animated,
 } from 'react-native';
-import { colors, spacing, borderRadius, typography, shadows } from '../utils/theme';
+import {
+  colors,
+  spacing,
+  borderRadius,
+  typography,
+  shadows,
+  fonts,
+  iconContainerSizes,
+} from '../utils/theme';
 
 interface ReminderItemProps {
   reminder: {
@@ -89,7 +97,9 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
             >
               {reminder.dailyTime}
             </Text>
-            <Text style={styles.dailyLabel}>יומי</Text>
+            <View style={styles.dailyBadge}>
+              <Text style={styles.dailyLabel}>יומי</Text>
+            </View>
           </View>
         </View>
 
@@ -131,9 +141,9 @@ const styles = StyleSheet.create({
     ...shadows.sm,
   },
   iconContainer: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: iconContainerSizes.md,
+    height: iconContainerSizes.md,
+    borderRadius: iconContainerSizes.md / 2,
     backgroundColor: colors.secondaryLight,
     alignItems: 'center',
     justifyContent: 'center',
@@ -143,14 +153,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   icon: {
-    fontSize: 26,
+    fontSize: 24,
   },
   content: {
     flex: 1,
   },
   title: {
     ...typography.body,
-    fontWeight: 'bold',
+    fontFamily: fonts.bold,
     color: colors.text,
     textAlign: 'right',
     marginBottom: spacing.xs,
@@ -167,21 +177,24 @@ const styles = StyleSheet.create({
     marginLeft: spacing.xs,
   },
   time: {
-    fontSize: 16,
+    ...typography.body,
+    fontFamily: fonts.semiBold,
     color: colors.primary,
-    fontWeight: '600',
     marginLeft: spacing.sm,
   },
   timeInactive: {
     color: colors.textSecondary,
   },
-  dailyLabel: {
-    fontSize: 12,
-    color: colors.textSecondary,
+  dailyBadge: {
     backgroundColor: colors.background,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     borderRadius: borderRadius.full,
+  },
+  dailyLabel: {
+    fontSize: 11,
+    fontFamily: fonts.medium,
+    color: colors.textSecondary,
   },
   actions: {
     flexDirection: 'row',

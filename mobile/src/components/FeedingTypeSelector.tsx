@@ -1,6 +1,6 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { colors, spacing, borderRadius, typography } from '../utils/theme';
+import React, { useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { colors, spacing, borderRadius, typography, fonts, shadows } from '../utils/theme';
 
 type FeedingType = 'BREASTFEEDING' | 'FORMULA';
 
@@ -8,6 +8,60 @@ interface FeedingTypeSelectorProps {
   value: FeedingType;
   onChange: (type: FeedingType) => void;
 }
+
+const OptionButton: React.FC<{
+  type: FeedingType;
+  icon: string;
+  label: string;
+  isSelected: boolean;
+  onPress: () => void;
+  color: string;
+}> = ({ type, icon, label, isSelected, onPress, color }) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.95,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  return (
+    <Animated.View style={[styles.optionWrapper, { transform: [{ scale: scaleAnim }] }]}>
+      <TouchableOpacity
+        style={[
+          styles.option,
+          isSelected && styles.optionSelected,
+          isSelected && { borderColor: color, backgroundColor: `${color}15` },
+        ]}
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        activeOpacity={0.9}
+      >
+        <View style={[styles.iconContainer, { backgroundColor: `${color}20` }]}>
+          <Text style={styles.optionIcon}>{icon}</Text>
+        </View>
+        <Text
+          style={[
+            styles.optionText,
+            isSelected && styles.optionTextSelected,
+            isSelected && { color },
+          ]}
+        >
+          {label}
+        </Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
 
 export const FeedingTypeSelector: React.FC<FeedingTypeSelectorProps> = ({
   value,
@@ -17,25 +71,23 @@ export const FeedingTypeSelector: React.FC<FeedingTypeSelectorProps> = ({
     <View style={styles.container}>
       <Text style={styles.label}>סוג האכלה</Text>
       <View style={styles.options}>
-        <TouchableOpacity
-          style={[styles.option, value === 'BREASTFEEDING' && styles.optionSelected]}
+        <OptionButton
+          type="BREASTFEEDING"
+          icon="🤱"
+          label="הנקה"
+          isSelected={value === 'BREASTFEEDING'}
           onPress={() => onChange('BREASTFEEDING')}
-        >
-          <Text style={styles.optionIcon}>🤱</Text>
-          <Text style={[styles.optionText, value === 'BREASTFEEDING' && styles.optionTextSelected]}>
-            הנקה
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[styles.option, value === 'FORMULA' && styles.optionSelected]}
+          color={colors.feedingBreastfeeding}
+        />
+
+        <OptionButton
+          type="FORMULA"
+          icon="🍼"
+          label='תמ"ל'
+          isSelected={value === 'FORMULA'}
           onPress={() => onChange('FORMULA')}
-        >
-          <Text style={styles.optionIcon}>🍼</Text>
-          <Text style={[styles.optionText, value === 'FORMULA' && styles.optionTextSelected]}>
-            תמ"ל
-          </Text>
-        </TouchableOpacity>
+          color={colors.feedingFormula}
+        />
       </View>
     </View>
   );
@@ -47,8 +99,8 @@ const styles = StyleSheet.create({
   },
   label: {
     ...typography.body,
+    fontFamily: fonts.semiBold,
     color: colors.text,
-    fontWeight: '600',
     textAlign: 'right',
     marginBottom: spacing.sm,
   },
@@ -56,33 +108,41 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     gap: spacing.md,
   },
-  option: {
+  optionWrapper: {
     flex: 1,
-    flexDirection: 'row-reverse',
+  },
+  option: {
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.md,
-    backgroundColor: colors.secondaryLight,
-    borderRadius: borderRadius.md,
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.lg,
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor: colors.border,
+    minHeight: 100,
   },
   optionSelected: {
-    backgroundColor: colors.primaryLight,
-    borderColor: colors.primary,
+    ...shadows.sm,
+  },
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
   },
   optionIcon: {
-    fontSize: 24,
-    marginLeft: spacing.sm,
+    fontSize: 28,
   },
   optionText: {
     ...typography.body,
+    fontFamily: fonts.medium,
     color: colors.textSecondary,
-    fontWeight: '500',
   },
   optionTextSelected: {
-    color: colors.primaryDark,
-    fontWeight: '600',
+    fontFamily: fonts.semiBold,
   },
 });

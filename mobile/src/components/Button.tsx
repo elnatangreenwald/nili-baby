@@ -1,6 +1,14 @@
-import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, ViewStyle, TextStyle } from 'react-native';
-import { colors, borderRadius, spacing, typography } from '../utils/theme';
+import React, { useRef } from 'react';
+import {
+  TouchableOpacity,
+  Text,
+  StyleSheet,
+  ActivityIndicator,
+  ViewStyle,
+  TextStyle,
+  Animated,
+} from 'react-native';
+import { colors, borderRadius, spacing, typography, shadows, fonts } from '../utils/theme';
 
 interface ButtonProps {
   title: string;
@@ -11,6 +19,7 @@ interface ButtonProps {
   disabled?: boolean;
   style?: ViewStyle;
   textStyle?: TextStyle;
+  icon?: string;
 }
 
 export const Button: React.FC<ButtonProps> = ({
@@ -22,11 +31,30 @@ export const Button: React.FC<ButtonProps> = ({
   disabled = false,
   style,
   textStyle,
+  icon,
 }) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.97,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      friction: 5,
+      useNativeDriver: true,
+    }).start();
+  };
+
   const buttonStyles = [
     styles.base,
     styles[variant],
     styles[`${size}Size`],
+    variant === 'primary' && shadows.primary,
     disabled && styles.disabled,
     style,
   ];
@@ -39,32 +67,40 @@ export const Button: React.FC<ButtonProps> = ({
   ];
 
   return (
-    <TouchableOpacity
-      style={buttonStyles}
-      onPress={onPress}
-      disabled={disabled || loading}
-      activeOpacity={0.8}
-    >
-      {loading ? (
-        <ActivityIndicator color={variant === 'outline' ? colors.primary : colors.white} />
-      ) : (
-        <Text style={textStyles}>{title}</Text>
-      )}
-    </TouchableOpacity>
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <TouchableOpacity
+        style={buttonStyles}
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        disabled={disabled || loading}
+        activeOpacity={0.9}
+      >
+        {loading ? (
+          <ActivityIndicator color={variant === 'outline' ? colors.primary : colors.white} />
+        ) : (
+          <>
+            {icon && <Text style={styles.icon}>{icon}</Text>}
+            <Text style={textStyles}>{title}</Text>
+          </>
+        )}
+      </TouchableOpacity>
+    </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
   base: {
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: borderRadius.md,
+    borderRadius: borderRadius.lg,
   },
   primary: {
     backgroundColor: colors.primary,
   },
   secondary: {
-    backgroundColor: colors.secondary,
+    backgroundColor: colors.secondaryLight,
   },
   outline: {
     backgroundColor: 'transparent',
@@ -72,39 +108,47 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   smallSize: {
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.sm + 2,
     paddingHorizontal: spacing.md,
+    minHeight: 40,
   },
   mediumSize: {
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
+    minHeight: 48,
   },
   largeSize: {
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.md + 4,
     paddingHorizontal: spacing.xl,
+    minHeight: 56,
   },
   disabled: {
     opacity: 0.5,
   },
   text: {
-    fontWeight: '600',
+    fontFamily: fonts.semiBold,
+    textAlign: 'center',
   },
   primaryText: {
     color: colors.white,
   },
   secondaryText: {
-    color: colors.primaryDark,
+    color: colors.primary,
   },
   outlineText: {
     color: colors.primary,
   },
   smallText: {
-    fontSize: 14,
+    ...typography.buttonSmall,
   },
   mediumText: {
-    fontSize: 16,
+    ...typography.button,
   },
   largeText: {
+    ...typography.buttonLarge,
+  },
+  icon: {
     fontSize: 18,
+    marginRight: spacing.sm,
   },
 });

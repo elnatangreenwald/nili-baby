@@ -1,234 +1,229 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
-  Alert,
+  RefreshControl,
   Modal,
   TouchableOpacity,
   Animated,
-  Dimensions,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { colors, spacing, typography, borderRadius, shadows } from '../utils/theme';
+import {
+  colors,
+  spacing,
+  borderRadius,
+  typography,
+  shadows,
+  fonts,
+  iconContainerSizes,
+} from '../utils/theme';
+import { ReminderItem } from '../components/ReminderItem';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
-import { ReminderItem } from '../components/ReminderItem';
-import { reminderApi } from '../services/api';
-import { storage } from '../utils/storage';
+import { reminderApi, babyApi } from '../services/api';
 
-const { width } = Dimensions.get('window');
+interface QuickReminder {
+  title: string;
+  icon: string;
+  defaultTime: string;
+}
 
-const DEFAULT_REMINDERS = [
-  { title: 'מדידת חום', time: '08:00', icon: '🌡️' },
-  { title: 'ויטמין D', time: '09:00', icon: '☀️' },
-  { title: 'ויטמין ברזל', time: '12:00', icon: '💊' },
-  { title: 'אמבטיה', time: '19:00', icon: '🛁' },
+const QUICK_REMINDERS: QuickReminder[] = [
+  { title: 'מדידת חום', icon: '🌡️', defaultTime: '08:00' },
+  { title: 'ויטמין D', icon: '☀️', defaultTime: '09:00' },
+  { title: 'טיפות ברזל', icon: '💊', defaultTime: '12:00' },
+  { title: 'אמבטיה', icon: '🛁', defaultTime: '19:00' },
 ];
 
 export const RemindersScreen: React.FC = () => {
   const [reminders, setReminders] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [baby, setBaby] = useState<any>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newTime, setNewTime] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [reminders]);
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
-  const loadReminders = async () => {
+  const loadData = async () => {
     try {
-      const babyId = await storage.getSelectedBaby();
-      if (!babyId) return;
+      const babiesResponse = await babyApi.getBabies();
+      const babies = babiesResponse.data;
 
-      const res = await reminderApi.getAll(babyId);
-      setReminders(res.data.reminders);
+      if (babies.length > 0) {
+        const currentBaby = babies[0];
+        setBaby(currentBaby);
+
+        const remindersResponse = await reminderApi.getReminders(currentBaby.id);
+        setReminders(remindersResponse.data);
+      }
     } catch (error) {
-      console.error('Error loading reminders:', error);
-    } finally {
-      setLoading(false);
+      console.error('Error loading data:', error);
     }
   };
 
   useFocusEffect(
     useCallback(() => {
-      loadReminders();
+      loadData();
     }, [])
   );
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  };
+
   const handleToggle = async (id: string, isActive: boolean) => {
     try {
-      await reminderApi.update(id, { isActive });
-      setReminders(reminders.map((r) => (r.id === id ? { ...r, isActive } : r)));
+      await reminderApi.updateReminder(id, { isActive });
+      await loadData();
     } catch (error) {
-      Alert.alert('שגיאה', 'לא הצלחנו לעדכן');
+      console.error('Error updating reminder:', error);
     }
   };
 
   const handleDelete = async (id: string) => {
-    Alert.alert('מחיקת תזכורת', 'האם למחוק את התזכורת?', [
-      { text: 'ביטול', style: 'cancel' },
-      {
-        text: 'מחק',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await reminderApi.delete(id);
-            setReminders(reminders.filter((r) => r.id !== id));
-          } catch (error) {
-            Alert.alert('שגיאה', 'לא הצלחנו למחוק');
-          }
-        },
-      },
-    ]);
+    try {
+      await reminderApi.deleteReminder(id);
+      await loadData();
+    } catch (error) {
+      console.error('Error deleting reminder:', error);
+    }
   };
 
   const handleAddReminder = async () => {
-    if (!newTitle.trim() || !newTime.trim()) {
-      Alert.alert('שגיאה', 'נא למלא את כל השדות');
-      return;
-    }
+    if (!baby || !newTitle.trim() || !newTime.trim()) return;
 
-    const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
-    if (!timeRegex.test(newTime)) {
-      Alert.alert('שגיאה', 'פורמט שעה לא תקין (HH:MM)');
-      return;
-    }
-
-    setSubmitting(true);
+    setLoading(true);
     try {
-      const babyId = await storage.getSelectedBaby();
-      if (!babyId) return;
-
-      const res = await reminderApi.create({
-        babyId,
-        title: newTitle,
+      await reminderApi.addReminder({
+        babyId: baby.id,
+        title: newTitle.trim(),
         dailyTime: newTime,
       });
-
-      setReminders([...reminders, res.data.reminder]);
-      setModalVisible(false);
       setNewTitle('');
       setNewTime('');
+      setModalVisible(false);
+      await loadData();
     } catch (error) {
-      Alert.alert('שגיאה', 'לא הצלחנו להוסיף תזכורת');
+      console.error('Error adding reminder:', error);
     } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
   };
 
-  const handleAddDefault = async (item: { title: string; time: string }) => {
-    setSubmitting(true);
+  const handleQuickAdd = async (reminder: QuickReminder) => {
+    if (!baby) return;
+
+    setLoading(true);
     try {
-      const babyId = await storage.getSelectedBaby();
-      if (!babyId) return;
-
-      const res = await reminderApi.create({
-        babyId,
-        title: item.title,
-        dailyTime: item.time,
+      await reminderApi.addReminder({
+        babyId: baby.id,
+        title: reminder.title,
+        dailyTime: reminder.defaultTime,
       });
-
-      setReminders([...reminders, res.data.reminder]);
-      Alert.alert('✓ נוסף', `התזכורת "${item.title}" נוספה בהצלחה`);
+      await loadData();
     } catch (error) {
-      Alert.alert('שגיאה', 'לא הצלחנו להוסיף תזכורת');
+      console.error('Error adding reminder:', error);
     } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
   };
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingEmoji}>⏰</Text>
-        <Text style={styles.loadingText}>טוען תזכורות...</Text>
-      </View>
-    );
-  }
+  const activeReminders = reminders.filter((r) => r.isActive);
+  const inactiveReminders = reminders.filter((r) => !r.isActive);
 
   return (
-    <View style={styles.container}>
+    <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
+      <View style={styles.header}>
+        <View style={styles.statsRow}>
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{activeReminders.length}</Text>
+            <Text style={styles.statLabel}>פעילות</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={[styles.statValue, { color: colors.textLight }]}>
+              {inactiveReminders.length}
+            </Text>
+            <Text style={styles.statLabel}>מושבתות</Text>
+          </View>
+        </View>
+      </View>
+
       <FlatList
         data={reminders}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item, index }) => (
-          <Animated.View
-            style={{
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            }}
-          >
-            <ReminderItem
-              reminder={item}
-              onToggle={handleToggle}
-              onDelete={handleDelete}
-            />
-          </Animated.View>
+        renderItem={({ item }) => (
+          <ReminderItem
+            reminder={item}
+            onToggle={handleToggle}
+            onDelete={handleDelete}
+          />
         )}
-        contentContainerStyle={styles.list}
-        ListHeaderComponent={
-          <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
-            <View style={styles.headerContent}>
-              <View style={styles.headerLeft}>
-                <Text style={styles.headerIcon}>⏰</Text>
-                <View>
-                  <Text style={styles.title}>תזכורות יומיות</Text>
-                  <Text style={styles.subtitle}>
-                    {reminders.filter((r) => r.isActive).length} פעילות
-                  </Text>
-                </View>
-              </View>
-              <Button
-                title="➕ הוסף"
-                onPress={() => setModalVisible(true)}
-                size="small"
-              />
-            </View>
-          </Animated.View>
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
         }
-        ListEmptyComponent={
-          <Animated.View style={[styles.emptyContainer, { opacity: fadeAnim }]}>
-            <Text style={styles.emptyIcon}>⏰</Text>
-            <Text style={styles.emptyTitle}>אין תזכורות</Text>
-            <Text style={styles.emptyText}>הוסף תזכורות מהירות:</Text>
-            <View style={styles.defaultReminders}>
-              {DEFAULT_REMINDERS.map((item, index) => (
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={
+          <View style={styles.quickAddSection}>
+            <Text style={styles.sectionTitle}>הוספה מהירה</Text>
+            <View style={styles.quickAddGrid}>
+              {QUICK_REMINDERS.map((reminder, index) => (
                 <TouchableOpacity
                   key={index}
-                  style={styles.defaultItem}
-                  onPress={() => handleAddDefault(item)}
-                  disabled={submitting}
+                  style={styles.quickAddButton}
+                  onPress={() => handleQuickAdd(reminder)}
+                  disabled={loading}
                 >
-                  <Text style={styles.defaultIcon}>{item.icon}</Text>
-                  <View style={styles.defaultInfo}>
-                    <Text style={styles.defaultTitle}>{item.title}</Text>
-                    <Text style={styles.defaultTime}>{item.time}</Text>
+                  <View style={styles.quickAddIcon}>
+                    <Text style={styles.quickAddEmoji}>{reminder.icon}</Text>
                   </View>
-                  <Text style={styles.addIcon}>➕</Text>
+                  <Text style={styles.quickAddLabel}>{reminder.title}</Text>
+                  <Text style={styles.quickAddTime}>{reminder.defaultTime}</Text>
                 </TouchableOpacity>
               ))}
             </View>
-          </Animated.View>
+          </View>
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyIcon}>⏰</Text>
+            <Text style={styles.emptyTitle}>אין תזכורות</Text>
+            <Text style={styles.emptySubtitle}>
+              הוסף תזכורות יומיות לטיפול בתינוק
+            </Text>
+          </View>
         }
       />
+
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => setModalVisible(true)}
+      >
+        <Text style={styles.fabIcon}>+</Text>
+      </TouchableOpacity>
 
       <Modal
         visible={modalVisible}
@@ -236,48 +231,52 @@ export const RemindersScreen: React.FC = () => {
         transparent
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalIcon}>⏰</Text>
               <Text style={styles.modalTitle}>תזכורת חדשה</Text>
-            </View>
-
-            <Input
-              label="שם התזכורת"
-              value={newTitle}
-              onChangeText={setNewTitle}
-              placeholder="לדוגמה: ויטמין D"
-              icon="📝"
-            />
-
-            <Input
-              label="שעה (HH:MM)"
-              value={newTime}
-              onChangeText={setNewTime}
-              placeholder="09:00"
-              keyboardType="numbers-and-punctuation"
-              icon="🕐"
-            />
-
-            <View style={styles.modalActions}>
-              <Button
-                title="ביטול"
+              <TouchableOpacity
                 onPress={() => setModalVisible(false)}
-                variant="outline"
-                style={styles.modalButton}
-              />
-              <Button
-                title="הוסף"
-                onPress={handleAddReminder}
-                loading={submitting}
-                style={styles.modalButton}
-              />
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={styles.closeButton}>✕</Text>
+              </TouchableOpacity>
             </View>
+
+            <ScrollView keyboardShouldPersistTaps="handled">
+              <Input
+                label="שם התזכורת"
+                value={newTitle}
+                onChangeText={setNewTitle}
+                placeholder="לדוגמה: מדידת חום"
+                icon="📝"
+              />
+
+              <Input
+                label="שעה יומית"
+                value={newTime}
+                onChangeText={setNewTime}
+                placeholder="HH:MM (לדוגמה: 08:00)"
+                keyboardType="numbers-and-punctuation"
+                icon="🕐"
+                hint="הזן שעה בפורמט 24 שעות"
+              />
+
+              <Button
+                title="הוסף תזכורת"
+                onPress={handleAddReminder}
+                loading={loading}
+                disabled={!newTitle.trim() || !newTime.trim()}
+                style={styles.addButton}
+              />
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
-    </View>
+    </Animated.View>
   );
 };
 
@@ -286,135 +285,152 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  loadingContainer: {
-    flex: 1,
+  header: {
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    ...shadows.sm,
+  },
+  statsRow: {
+    flexDirection: 'row-reverse',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: colors.background,
   },
-  loadingEmoji: {
-    fontSize: 60,
-    marginBottom: spacing.md,
+  statItem: {
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
   },
-  loadingText: {
-    ...typography.body,
+  statDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: colors.border,
+  },
+  statValue: {
+    fontSize: 28,
+    fontFamily: fonts.bold,
+    color: colors.primary,
+  },
+  statLabel: {
+    fontSize: 14,
+    fontFamily: fonts.regular,
     color: colors.textSecondary,
+    marginTop: spacing.xs,
   },
-  list: {
-    padding: spacing.md,
-    paddingBottom: spacing.xxl,
+  listContent: {
+    padding: spacing.lg,
+    paddingBottom: 100,
   },
-  header: {
+  quickAddSection: {
     marginBottom: spacing.lg,
   },
-  headerContent: {
+  sectionTitle: {
+    ...typography.h3,
+    fontFamily: fonts.semiBold,
+    color: colors.text,
+    marginBottom: spacing.md,
+    textAlign: 'right',
+  },
+  quickAddGrid: {
     flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  quickAddButton: {
+    width: '48%',
     backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
     padding: spacing.md,
-    borderRadius: borderRadius.xl,
+    alignItems: 'center',
     ...shadows.sm,
   },
-  headerLeft: {
-    flexDirection: 'row-reverse',
+  quickAddIcon: {
+    width: iconContainerSizes.md,
+    height: iconContainerSizes.md,
+    borderRadius: iconContainerSizes.md / 2,
+    backgroundColor: colors.secondaryLight,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
   },
-  headerIcon: {
-    fontSize: 40,
-    marginLeft: spacing.md,
+  quickAddEmoji: {
+    fontSize: 24,
   },
-  title: {
-    ...typography.h2,
+  quickAddLabel: {
+    fontSize: 14,
+    fontFamily: fonts.semiBold,
     color: colors.text,
+    marginBottom: spacing.xs,
   },
-  subtitle: {
-    ...typography.bodySmall,
+  quickAddTime: {
+    fontSize: 12,
+    fontFamily: fonts.regular,
     color: colors.textSecondary,
   },
-  emptyContainer: {
+  emptyState: {
     alignItems: 'center',
-    paddingVertical: spacing.xl,
+    paddingVertical: spacing.xxl,
   },
   emptyIcon: {
-    fontSize: 80,
-    marginBottom: spacing.lg,
+    fontSize: 64,
+    marginBottom: spacing.md,
   },
   emptyTitle: {
-    ...typography.h2,
+    ...typography.h3,
+    fontFamily: fonts.semiBold,
     color: colors.text,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
-  emptyText: {
+  emptySubtitle: {
     ...typography.body,
+    fontFamily: fonts.regular,
     color: colors.textSecondary,
-    marginBottom: spacing.lg,
+    textAlign: 'center',
   },
-  defaultReminders: {
-    width: '100%',
-  },
-  defaultItem: {
-    flexDirection: 'row-reverse',
+  fab: {
+    position: 'absolute',
+    bottom: spacing.xl,
+    left: spacing.xl,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.primary,
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    padding: spacing.md,
-    borderRadius: borderRadius.lg,
-    marginBottom: spacing.sm,
-    ...shadows.sm,
+    justifyContent: 'center',
+    ...shadows.lg,
   },
-  defaultIcon: {
+  fabIcon: {
     fontSize: 32,
-    marginLeft: spacing.md,
-  },
-  defaultInfo: {
-    flex: 1,
-    alignItems: 'flex-end',
-  },
-  defaultTitle: {
-    ...typography.body,
-    color: colors.text,
-    fontWeight: '600',
-  },
-  defaultTime: {
-    ...typography.bodySmall,
-    color: colors.primary,
-  },
-  addIcon: {
-    fontSize: 20,
-    color: colors.primary,
+    color: colors.white,
+    fontFamily: fonts.bold,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    padding: spacing.lg,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
   },
   modalContent: {
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.xl,
+    borderTopLeftRadius: borderRadius.xl,
+    borderTopRightRadius: borderRadius.xl,
     padding: spacing.lg,
-    ...shadows.lg,
+    maxHeight: '80%',
   },
   modalHeader: {
     flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: spacing.lg,
-  },
-  modalIcon: {
-    fontSize: 32,
-    marginLeft: spacing.sm,
   },
   modalTitle: {
     ...typography.h2,
+    fontFamily: fonts.bold,
     color: colors.text,
   },
-  modalActions: {
-    flexDirection: 'row-reverse',
-    gap: spacing.md,
-    marginTop: spacing.md,
+  closeButton: {
+    fontSize: 24,
+    color: colors.textSecondary,
   },
-  modalButton: {
-    flex: 1,
+  addButton: {
+    marginTop: spacing.md,
   },
 });

@@ -6,7 +6,15 @@ import {
   TouchableOpacity,
   Animated,
 } from 'react-native';
-import { colors, spacing, borderRadius, typography, shadows } from '../utils/theme';
+import {
+  colors,
+  spacing,
+  borderRadius,
+  typography,
+  shadows,
+  fonts,
+  iconContainerSizes,
+} from '../utils/theme';
 import { formatTime, formatRelativeTime } from '../utils/helpers';
 
 interface FeedingHistoryItemProps {
@@ -28,7 +36,10 @@ export const FeedingHistoryItem: React.FC<FeedingHistoryItemProps> = ({
 
   const typeLabel = feeding.type === 'BREASTFEEDING' ? 'הנקה' : 'תמ"ל';
   const typeIcon = feeding.type === 'BREASTFEEDING' ? '🤱' : '🍼';
-  const typeColor = feeding.type === 'BREASTFEEDING' ? '#FFB74D' : '#4FC3F7';
+  const typeColor =
+    feeding.type === 'BREASTFEEDING'
+      ? colors.feedingBreastfeeding
+      : colors.feedingFormula;
 
   const handlePressIn = () => {
     Animated.spring(scaleAnim, {
@@ -45,14 +56,18 @@ export const FeedingHistoryItem: React.FC<FeedingHistoryItemProps> = ({
   };
 
   return (
-    <Animated.View style={[styles.container, { transform: [{ scale: scaleAnim }] }]}>
+    <Animated.View
+      style={[styles.container, { transform: [{ scale: scaleAnim }] }]}
+    >
       <TouchableOpacity
         activeOpacity={0.9}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         style={styles.touchable}
       >
-        <View style={[styles.iconContainer, { backgroundColor: `${typeColor}20` }]}>
+        <View
+          style={[styles.iconContainer, { backgroundColor: `${typeColor}20` }]}
+        >
           <Text style={styles.icon}>{typeIcon}</Text>
         </View>
 
@@ -60,7 +75,9 @@ export const FeedingHistoryItem: React.FC<FeedingHistoryItemProps> = ({
           <View style={styles.header}>
             <View style={styles.titleRow}>
               <Text style={styles.type}>{typeLabel}</Text>
-              <View style={[styles.typeBadge, { backgroundColor: `${typeColor}30` }]}>
+              <View
+                style={[styles.typeBadge, { backgroundColor: `${typeColor}30` }]}
+              >
                 <Text style={[styles.typeBadgeText, { color: typeColor }]}>
                   {feeding.type === 'BREASTFEEDING' ? 'הנקה' : 'בקבוק'}
                 </Text>
@@ -78,14 +95,18 @@ export const FeedingHistoryItem: React.FC<FeedingHistoryItemProps> = ({
             )}
             <View style={styles.relativeContainer}>
               <Text style={styles.relativeIcon}>🕐</Text>
-              <Text style={styles.relative}>{formatRelativeTime(feeding.time)}</Text>
+              <Text style={styles.relative}>
+                {formatRelativeTime(feeding.time)}
+              </Text>
             </View>
           </View>
 
           {feeding.user && (
             <View style={styles.recordedByRow}>
               <Text style={styles.recordedByIcon}>👤</Text>
-              <Text style={styles.recordedBy}>נרשם ע"י {feeding.user.name}</Text>
+              <Text style={styles.recordedBy}>
+                נרשם ע"י {feeding.user.name}
+              </Text>
             </View>
           )}
         </View>
@@ -116,15 +137,15 @@ const styles = StyleSheet.create({
     ...shadows.sm,
   },
   iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: iconContainerSizes.md,
+    height: iconContainerSizes.md,
+    borderRadius: iconContainerSizes.md / 2,
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: spacing.md,
   },
   icon: {
-    fontSize: 28,
+    fontSize: 26,
   },
   content: {
     flex: 1,
@@ -140,7 +161,7 @@ const styles = StyleSheet.create({
   },
   type: {
     ...typography.body,
-    fontWeight: 'bold',
+    fontFamily: fonts.bold,
     color: colors.text,
     marginLeft: spacing.sm,
   },
@@ -151,12 +172,12 @@ const styles = StyleSheet.create({
   },
   typeBadgeText: {
     fontSize: 10,
-    fontWeight: '600',
+    fontFamily: fonts.semiBold,
   },
   time: {
     ...typography.body,
+    fontFamily: fonts.semiBold,
     color: colors.primary,
-    fontWeight: '600',
   },
   details: {
     flexDirection: 'row-reverse',
@@ -174,12 +195,13 @@ const styles = StyleSheet.create({
   },
   amountValue: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontFamily: fonts.bold,
     color: colors.text,
     marginLeft: 2,
   },
   amountUnit: {
     fontSize: 12,
+    fontFamily: fonts.regular,
     color: colors.textSecondary,
   },
   relativeContainer: {
@@ -192,6 +214,7 @@ const styles = StyleSheet.create({
   },
   relative: {
     ...typography.caption,
+    fontFamily: fonts.regular,
     color: colors.textSecondary,
   },
   recordedByRow: {
@@ -205,6 +228,7 @@ const styles = StyleSheet.create({
   },
   recordedBy: {
     ...typography.caption,
+    fontFamily: fonts.regular,
     color: colors.textLight,
   },
   deleteButton: {

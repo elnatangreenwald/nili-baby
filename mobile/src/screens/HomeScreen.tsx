@@ -4,101 +4,82 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  RefreshControl,
-  Alert,
-  Animated,
   TouchableOpacity,
+  RefreshControl,
+  Animated,
   Dimensions,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { colors, spacing, typography, shadows, borderRadius } from '../utils/theme';
-import { Button } from '../components/Button';
+import {
+  colors,
+  spacing,
+  borderRadius,
+  typography,
+  shadows,
+  fonts,
+  iconContainerSizes,
+} from '../utils/theme';
 import { Card } from '../components/Card';
+import { Button } from '../components/Button';
 import { NextFeedingTimer } from '../components/NextFeedingTimer';
 import { FeedingSlider } from '../components/FeedingSlider';
 import { FeedingTypeSelector } from '../components/FeedingTypeSelector';
 import { feedingApi, babyApi } from '../services/api';
 import { storage } from '../utils/storage';
-import { calculateAge } from '../utils/helpers';
+import { formatTime } from '../utils/helpers';
 
 const { width } = Dimensions.get('window');
 
-interface HomeScreenProps {
-  navigation: any;
-}
-
-export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
+export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const [baby, setBaby] = useState<any>(null);
-  const [lastFeeding, setLastFeeding] = useState<any>(null);
+  const [feedings, setFeedings] = useState<any[]>([]);
   const [nextFeedingTime, setNextFeedingTime] = useState<Date | null>(null);
-  const [feedingAmount, setFeedingAmount] = useState(120);
-  const [feedingType, setFeedingType] = useState<'BREASTFEEDING' | 'FORMULA'>('FORMULA');
-  const [loading, setLoading] = useState(true);
+  const [lastFeedingTime, setLastFeedingTime] = useState<Date | null>(null);
+  const [feedingAmount, setFeedingAmount] = useState(0);
+  const [feedingType, setFeedingType] = useState<'BREASTFEEDING' | 'FORMULA'>(
+    'FORMULA'
+  );
   const [refreshing, setRefreshing] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [stats, setStats] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<any>(null);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
-  const scaleAnim = useRef(new Animated.Value(0.95)).current;
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 8,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [baby]);
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   const loadData = async () => {
     try {
-      const babyId = await storage.getSelectedBaby();
+      const userData = await storage.getUser();
+      setUser(userData);
 
-      if (!babyId) {
-        const babiesRes = await babyApi.getAll();
-        if (babiesRes.data.babies.length > 0) {
-          const firstBaby = babiesRes.data.babies[0];
-          await storage.setSelectedBaby(firstBaby.id);
-          setBaby(firstBaby);
-          await loadFeedingData(firstBaby.id);
+      const babiesResponse = await babyApi.getBabies();
+      const babies = babiesResponse.data;
+
+      if (babies.length > 0) {
+        const currentBaby = babies[0];
+        setBaby(currentBaby);
+
+        const feedingsResponse = await feedingApi.getFeedings(currentBaby.id);
+        const feedingsList = feedingsResponse.data;
+        setFeedings(feedingsList);
+
+        if (feedingsList.length > 0) {
+          const lastFeeding = new Date(feedingsList[0].time);
+          setLastFeedingTime(lastFeeding);
+          const nextFeeding = new Date(
+            lastFeeding.getTime() + currentBaby.feedingIntervalHours * 60 * 60 * 1000
+          );
+          setNextFeedingTime(nextFeeding);
         }
-      } else {
-        const babyRes = await babyApi.getOne(babyId);
-        setBaby(babyRes.data.baby);
-        await loadFeedingData(babyId);
       }
     } catch (error) {
       console.error('Error loading data:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  const loadFeedingData = async (babyId: string) => {
-    try {
-      const [lastRes, statsRes] = await Promise.all([
-        feedingApi.getLast(babyId),
-        feedingApi.getStats(babyId),
-      ]);
-      setLastFeeding(lastRes.data.lastFeeding);
-      setNextFeedingTime(lastRes.data.nextFeedingTime ? new Date(lastRes.data.nextFeedingTime) : null);
-      setFeedingAmount(lastRes.data.settings?.targetAmountMl || 120);
-      setStats(statsRes.data);
-    } catch (error) {
-      console.error('Error loading feeding data:', error);
     }
   };
 
@@ -108,224 +89,228 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     }, [])
   );
 
-  const handleRecordFeeding = async () => {
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  };
+
+  const handleAddFeeding = async () => {
     if (!baby) return;
 
-    setSubmitting(true);
+    setLoading(true);
     try {
-      await feedingApi.create({
+      await feedingApi.addFeeding({
         babyId: baby.id,
         type: feedingType,
-        amountMl: feedingType === 'FORMULA' ? feedingAmount : undefined,
+        amountMl: feedingAmount > 0 ? feedingAmount : null,
       });
-
-      Alert.alert('🎉 נרשם בהצלחה!', 'האכלה נרשמה במערכת', [
-        { text: 'מעולה', style: 'default' },
-      ]);
-      await loadFeedingData(baby.id);
+      setFeedingAmount(0);
+      await loadData();
     } catch (error) {
-      Alert.alert('שגיאה', 'לא הצלחנו לרשום את ההאכלה');
+      console.error('Error adding feeding:', error);
     } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
   };
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    loadData();
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 6) return 'לילה טוב';
+    if (hour < 12) return 'בוקר טוב';
+    if (hour < 17) return 'צהריים טובים';
+    if (hour < 21) return 'ערב טוב';
+    return 'לילה טוב';
   };
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <Animated.View style={styles.loadingContent}>
-          <Text style={styles.loadingEmoji}>👶</Text>
-          <Text style={styles.loadingText}>טוען...</Text>
-        </Animated.View>
-      </View>
+  const getTodayStats = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayFeedings = feedings.filter(
+      (f) => new Date(f.time) >= today
     );
-  }
+    const totalAmount = todayFeedings.reduce(
+      (sum, f) => sum + (f.amountMl || 0),
+      0
+    );
+    return {
+      count: todayFeedings.length,
+      totalAmount,
+    };
+  };
+
+  const stats = getTodayStats();
 
   if (!baby) {
     return (
-      <View style={styles.noBabyContainer}>
-        <View style={styles.noBabyDecoration} />
-        <Animated.View
-          style={[
-            styles.noBabyContent,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            },
-          ]}
-        >
-          <Text style={styles.noBabyIcon}>👶</Text>
-          <Text style={styles.noBabyTitle}>ברוכים הבאים!</Text>
-          <Text style={styles.noBabyText}>
-            הוסף את התינוק שלך כדי להתחיל לעקוב אחרי האכלות, תזכורות ותורים
+      <View style={styles.emptyContainer}>
+        <View style={styles.emptyContent}>
+          <Text style={styles.emptyIcon}>👶</Text>
+          <Text style={styles.emptyTitle}>ברוכים הבאים!</Text>
+          <Text style={styles.emptySubtitle}>
+            כדי להתחיל, הוסף את התינוק שלך
           </Text>
           <Button
-            title="➕ הוסף תינוק"
+            title="הוסף תינוק"
             onPress={() => navigation.navigate('AddBaby')}
             style={styles.addBabyButton}
             size="large"
           />
-        </Animated.View>
+        </View>
       </View>
     );
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor={colors.primary}
-          colors={[colors.primary]}
-        />
-      }
-      showsVerticalScrollIndicator={false}
-    >
-      <Animated.View
-        style={[
-          styles.header,
-          {
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }],
-          },
-        ]}
+    <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
+        }
+        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.headerContent}>
-          <View style={styles.babyInfo}>
-            <Text style={styles.greeting}>שלום! 👋</Text>
-            <Text style={styles.babyName}>{baby.name}</Text>
-            <View style={styles.ageBadge}>
-              <Text style={styles.babyAge}>{calculateAge(baby.birthDate)}</Text>
+        <View style={styles.header}>
+          <View style={styles.headerTop}>
+            <View style={styles.greetingSection}>
+              <Text style={styles.greeting}>
+                {getGreeting()}, {user?.name?.split(' ')[0] || 'הורה'}
+              </Text>
+              <Text style={styles.babyName}>
+                מטפלים ב{baby.name} 💕
+              </Text>
+            </View>
+            <View style={styles.babyAvatar}>
+              <Text style={styles.babyAvatarEmoji}>👶</Text>
             </View>
           </View>
-          <View style={styles.avatarContainer}>
-            <Text style={styles.headerIcon}>👶</Text>
-          </View>
-        </View>
-      </Animated.View>
 
-      <Animated.View
-        style={{
-          opacity: fadeAnim,
-          transform: [{ translateY: slideAnim }],
-        }}
-      >
-        <NextFeedingTimer
-          nextFeedingTime={nextFeedingTime}
-          lastFeedingTime={lastFeeding?.time}
-        />
-      </Animated.View>
-
-      {stats && (
-        <Animated.View
-          style={[
-            styles.statsContainer,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            },
-          ]}
-        >
-          <Text style={styles.statsTitle}>סטטיסטיקות היום</Text>
           <View style={styles.statsRow}>
             <StatCard
               icon="🍼"
-              value={stats.todayCount || 0}
-              label="האכלות"
-              color="#FF69B4"
-            />
-            <StatCard
-              icon="💧"
-              value={`${stats.todayTotalMl || 0} מ"ל`}
-              label="סה״כ"
-              color="#4FC3F7"
+              value={stats.count.toString()}
+              label="האכלות היום"
+              color={colors.feedingFormula}
             />
             <StatCard
               icon="📊"
-              value={`${stats.averageAmountMl || 0} מ"ל`}
-              label="ממוצע"
-              color="#81C784"
+              value={`${stats.totalAmount}`}
+              label='מ"ל סה"כ'
+              color={colors.primary}
+            />
+            <StatCard
+              icon="🎯"
+              value={`${baby.targetAmountMl || 120}`}
+              label="יעד להאכלה"
+              color={colors.success}
             />
           </View>
-        </Animated.View>
-      )}
+        </View>
 
-      <Animated.View
-        style={{
-          opacity: fadeAnim,
-          transform: [{ scale: scaleAnim }],
-        }}
-      >
-        <Card style={styles.feedingCard}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardIcon}>🍼</Text>
-            <Text style={styles.cardTitle}>רישום האכלה</Text>
-          </View>
+        <View style={styles.section}>
+          <NextFeedingTimer
+            nextFeedingTime={nextFeedingTime}
+            lastFeedingTime={lastFeedingTime}
+            reminderMinutesBefore={baby.reminderMinutesBefore}
+          />
+        </View>
 
-          <FeedingTypeSelector value={feedingType} onChange={setFeedingType} />
+        <View style={styles.section}>
+          <Card variant="elevated" padding="lg">
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionIcon}>➕</Text>
+              <Text style={styles.sectionTitle}>רשום האכלה חדשה</Text>
+            </View>
 
-          {feedingType === 'FORMULA' && (
+            <FeedingTypeSelector value={feedingType} onChange={setFeedingType} />
+
             <FeedingSlider
               value={feedingAmount}
               onValueChange={setFeedingAmount}
               targetValue={baby.targetAmountMl}
-              maxValue={250}
             />
-          )}
 
-          <Button
-            title="✓ סמן האכלה"
-            onPress={handleRecordFeeding}
-            loading={submitting}
-            size="large"
-            style={styles.recordButton}
-          />
-        </Card>
-      </Animated.View>
+            <Button
+              title="רשום האכלה"
+              onPress={handleAddFeeding}
+              loading={loading}
+              style={styles.addButton}
+              size="large"
+            />
+          </Card>
+        </View>
 
-      <View style={styles.quickActions}>
-        <QuickActionButton
-          icon="📋"
-          label="היסטוריה"
-          onPress={() => navigation.navigate('FeedingHistory')}
-        />
-        <QuickActionButton
-          icon="⏰"
-          label="תזכורות"
-          onPress={() => navigation.navigate('Reminders')}
-        />
-        <QuickActionButton
-          icon="📅"
-          label="תורים"
-          onPress={() => navigation.navigate('Appointments')}
-        />
-        <QuickActionButton
-          icon="⚙️"
-          label="הגדרות"
-          onPress={() => navigation.navigate('Settings')}
-        />
-      </View>
-    </ScrollView>
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionIcon}>⚡</Text>
+            <Text style={styles.sectionTitle}>פעולות מהירות</Text>
+          </View>
+          <View style={styles.quickActions}>
+            <QuickActionButton
+              icon="📋"
+              label="היסטוריה"
+              onPress={() => navigation.navigate('FeedingHistory')}
+              color={colors.feedingFormula}
+            />
+            <QuickActionButton
+              icon="⏰"
+              label="תזכורות"
+              onPress={() => navigation.navigate('Reminders')}
+              color={colors.warning}
+            />
+            <QuickActionButton
+              icon="📅"
+              label="תורים"
+              onPress={() => navigation.navigate('Appointments')}
+              color={colors.appointmentDoctor}
+            />
+            <QuickActionButton
+              icon="⚙️"
+              label="הגדרות"
+              onPress={() => navigation.navigate('Settings')}
+              color={colors.textSecondary}
+            />
+          </View>
+        </View>
+
+        {feedings.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderRow}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionIcon}>🕐</Text>
+                <Text style={styles.sectionTitle}>האכלות אחרונות</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('FeedingHistory')}
+              >
+                <Text style={styles.seeAllText}>הצג הכל</Text>
+              </TouchableOpacity>
+            </View>
+            {feedings.slice(0, 3).map((feeding, index) => (
+              <RecentFeedingItem key={feeding.id} feeding={feeding} />
+            ))}
+          </View>
+        )}
+      </ScrollView>
+    </Animated.View>
   );
 };
 
 const StatCard: React.FC<{
   icon: string;
-  value: string | number;
+  value: string;
   label: string;
   color: string;
 }> = ({ icon, value, label, color }) => (
-  <View style={[styles.statCard, { borderLeftColor: color }]}>
+  <View style={[styles.statCard, { borderTopColor: color }]}>
     <Text style={styles.statIcon}>{icon}</Text>
-    <Text style={styles.statValue}>{value}</Text>
+    <Text style={[styles.statValue, { color }]}>{value}</Text>
     <Text style={styles.statLabel}>{label}</Text>
   </View>
 );
@@ -334,212 +319,290 @@ const QuickActionButton: React.FC<{
   icon: string;
   label: string;
   onPress: () => void;
-}> = ({ icon, label, onPress }) => (
-  <TouchableOpacity style={styles.quickActionButton} onPress={onPress}>
-    <View style={styles.quickActionIcon}>
-      <Text style={styles.quickActionEmoji}>{icon}</Text>
+  color: string;
+}> = ({ icon, label, onPress, color }) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.95,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  return (
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <TouchableOpacity
+        style={styles.quickAction}
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        activeOpacity={0.9}
+      >
+        <View style={[styles.quickActionIcon, { backgroundColor: `${color}20` }]}>
+          <Text style={styles.quickActionEmoji}>{icon}</Text>
+        </View>
+        <Text style={styles.quickActionLabel}>{label}</Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
+
+const RecentFeedingItem: React.FC<{ feeding: any }> = ({ feeding }) => {
+  const typeIcon = feeding.type === 'BREASTFEEDING' ? '🤱' : '🍼';
+  const typeColor =
+    feeding.type === 'BREASTFEEDING'
+      ? colors.feedingBreastfeeding
+      : colors.feedingFormula;
+
+  return (
+    <View style={styles.recentItem}>
+      <View style={[styles.recentIcon, { backgroundColor: `${typeColor}20` }]}>
+        <Text style={styles.recentEmoji}>{typeIcon}</Text>
+      </View>
+      <View style={styles.recentContent}>
+        <Text style={styles.recentType}>
+          {feeding.type === 'BREASTFEEDING' ? 'הנקה' : 'תמ"ל'}
+        </Text>
+        <Text style={styles.recentTime}>{formatTime(feeding.time)}</Text>
+      </View>
+      {feeding.amountMl && (
+        <View style={styles.recentAmount}>
+          <Text style={styles.recentAmountValue}>{feeding.amountMl}</Text>
+          <Text style={styles.recentAmountUnit}>מ"ל</Text>
+        </View>
+      )}
     </View>
-    <Text style={styles.quickActionLabel}>{label}</Text>
-  </TouchableOpacity>
-);
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
   },
-  content: {
-    padding: spacing.md,
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
     paddingBottom: spacing.xxl,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-  },
-  loadingContent: {
-    alignItems: 'center',
-  },
-  loadingEmoji: {
-    fontSize: 60,
-    marginBottom: spacing.md,
-  },
-  loadingText: {
-    ...typography.body,
-    color: colors.textSecondary,
-  },
-  noBabyContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  noBabyDecoration: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '40%',
-    backgroundColor: colors.primary,
-    borderBottomLeftRadius: 50,
-    borderBottomRightRadius: 50,
-  },
-  noBabyContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.xl,
-  },
-  noBabyIcon: {
-    fontSize: 100,
-    marginBottom: spacing.lg,
-  },
-  noBabyTitle: {
-    ...typography.h1,
-    color: colors.text,
-    marginBottom: spacing.sm,
-  },
-  noBabyText: {
-    ...typography.body,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: spacing.xl,
-    lineHeight: 24,
-  },
-  addBabyButton: {
-    minWidth: 200,
   },
   header: {
     backgroundColor: colors.primary,
-    borderRadius: borderRadius.xl,
-    padding: spacing.lg,
-    marginBottom: spacing.lg,
-    ...shadows.md,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xl,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
   },
-  headerContent: {
+  headerTop: {
     flexDirection: 'row-reverse',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: spacing.lg,
   },
-  babyInfo: {
-    alignItems: 'flex-end',
+  greetingSection: {
     flex: 1,
   },
   greeting: {
     fontSize: 16,
+    fontFamily: fonts.regular,
     color: 'rgba(255, 255, 255, 0.9)',
-    marginBottom: 4,
+    textAlign: 'right',
   },
   babyName: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontFamily: fonts.bold,
     color: colors.white,
-    marginBottom: spacing.xs,
-  },
-  ageBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: 20,
-  },
-  babyAge: {
-    fontSize: 14,
-    color: colors.white,
-    fontWeight: '500',
-  },
-  avatarContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerIcon: {
-    fontSize: 50,
-  },
-  statsContainer: {
-    marginBottom: spacing.lg,
-  },
-  statsTitle: {
-    ...typography.h3,
-    color: colors.text,
     textAlign: 'right',
-    marginBottom: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  babyAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: spacing.md,
+  },
+  babyAvatarEmoji: {
+    fontSize: 32,
   },
   statsRow: {
     flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
     gap: spacing.sm,
   },
   statCard: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.white,
     borderRadius: borderRadius.lg,
-    padding: spacing.md,
+    padding: spacing.sm,
     alignItems: 'center',
-    borderLeftWidth: 4,
-    ...shadows.sm,
+    borderTopWidth: 3,
   },
   statIcon: {
-    fontSize: 24,
+    fontSize: 20,
     marginBottom: spacing.xs,
   },
   statValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 2,
+    fontSize: 20,
+    fontFamily: fonts.bold,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 10,
+    fontFamily: fonts.regular,
     color: colors.textSecondary,
+    textAlign: 'center',
   },
-  feedingCard: {
-    marginBottom: spacing.lg,
+  section: {
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.lg,
   },
-  cardHeader: {
+  sectionHeaderRow: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  sectionHeader: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     marginBottom: spacing.md,
   },
-  cardIcon: {
-    fontSize: 24,
+  sectionIcon: {
+    fontSize: 20,
     marginLeft: spacing.sm,
   },
-  cardTitle: {
+  sectionTitle: {
     ...typography.h3,
+    fontFamily: fonts.semiBold,
     color: colors.text,
   },
-  recordButton: {
+  seeAllText: {
+    fontSize: 14,
+    fontFamily: fonts.medium,
+    color: colors.primary,
+  },
+  addButton: {
     marginTop: spacing.md,
   },
   quickActions: {
     flexDirection: 'row-reverse',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
     gap: spacing.sm,
   },
-  quickActionButton: {
-    width: (width - spacing.md * 2 - spacing.sm * 3) / 4,
+  quickAction: {
+    width: (width - spacing.lg * 2 - spacing.sm * 3) / 4,
     alignItems: 'center',
     padding: spacing.sm,
   },
   quickActionIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.surface,
-    justifyContent: 'center',
+    width: iconContainerSizes.lg,
+    height: iconContainerSizes.lg,
+    borderRadius: iconContainerSizes.lg / 2,
     alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: spacing.xs,
-    ...shadows.sm,
   },
   quickActionEmoji: {
     fontSize: 24,
   },
   quickActionLabel: {
     fontSize: 12,
+    fontFamily: fonts.medium,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  recentItem: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    borderRadius: borderRadius.lg,
+    marginBottom: spacing.sm,
+    ...shadows.sm,
+  },
+  recentIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: spacing.md,
+  },
+  recentEmoji: {
+    fontSize: 22,
+  },
+  recentContent: {
+    flex: 1,
+  },
+  recentType: {
+    fontSize: 15,
+    fontFamily: fonts.semiBold,
+    color: colors.text,
+    textAlign: 'right',
+  },
+  recentTime: {
+    fontSize: 13,
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
+    textAlign: 'right',
+  },
+  recentAmount: {
+    flexDirection: 'row-reverse',
+    alignItems: 'baseline',
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.md,
+  },
+  recentAmountValue: {
+    fontSize: 16,
+    fontFamily: fonts.bold,
+    color: colors.primary,
+    marginLeft: 2,
+  },
+  recentAmountUnit: {
+    fontSize: 11,
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
+  },
+  emptyContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+  emptyContent: {
+    alignItems: 'center',
+  },
+  emptyIcon: {
+    fontSize: 80,
+    marginBottom: spacing.lg,
+  },
+  emptyTitle: {
+    ...typography.h2,
+    fontFamily: fonts.bold,
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  emptySubtitle: {
+    ...typography.body,
+    fontFamily: fonts.regular,
     color: colors.textSecondary,
     textAlign: 'center',
+    marginBottom: spacing.xl,
+  },
+  addBabyButton: {
+    minWidth: 200,
   },
 });

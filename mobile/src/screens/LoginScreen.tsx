@@ -10,7 +10,14 @@ import {
   Dimensions,
   TouchableOpacity,
 } from 'react-native';
-import { colors, spacing, typography, shadows, borderRadius } from '../utils/theme';
+import {
+  colors,
+  spacing,
+  typography,
+  shadows,
+  borderRadius,
+  fonts,
+} from '../utils/theme';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { authApi } from '../services/api';
@@ -23,7 +30,10 @@ interface LoginScreenProps {
   onLogin: () => void;
 }
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation, onLogin }) => {
+export const LoginScreen: React.FC<LoginScreenProps> = ({
+  navigation,
+  onLogin,
+}) => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -39,12 +49,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation, onLogin })
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 600,
+        duration: 500,
         useNativeDriver: true,
       }),
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 600,
+        duration: 500,
         useNativeDriver: true,
       }),
     ]).start();
@@ -53,26 +63,43 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation, onLogin })
   const toggleMode = () => {
     Animated.sequence([
       Animated.timing(formSlide, {
-        toValue: isLogin ? -20 : 20,
-        duration: 150,
+        toValue: isLogin ? -15 : 15,
+        duration: 100,
         useNativeDriver: true,
       }),
       Animated.timing(formSlide, {
         toValue: 0,
-        duration: 150,
+        duration: 100,
         useNativeDriver: true,
       }),
     ]).start();
-    
+
     setIsLogin(!isLogin);
     setError('');
   };
 
-  const handleSubmit = async () => {
-    if (!email || !password || (!isLogin && !name)) {
-      setError('נא למלא את כל השדות');
-      return;
+  const validateForm = () => {
+    if (!email.trim()) {
+      setError('נא להזין אימייל');
+      return false;
     }
+    if (!email.includes('@')) {
+      setError('אימייל לא תקין');
+      return false;
+    }
+    if (!password || password.length < 6) {
+      setError('סיסמה חייבת להכיל לפחות 6 תווים');
+      return false;
+    }
+    if (!isLogin && !name.trim()) {
+      setError('נא להזין שם');
+      return false;
+    }
+    return true;
+  };
+
+  const handleSubmit = async () => {
+    if (!validateForm()) return;
 
     setError('');
     setLoading(true);
@@ -203,12 +230,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation, onLogin })
                 style={styles.submitButton}
                 size="large"
               />
-
-              {isLogin && (
-                <TouchableOpacity style={styles.forgotPassword}>
-                  <Text style={styles.forgotPasswordText}>שכחת סיסמה?</Text>
-                </TouchableOpacity>
-              )}
             </View>
           </Animated.View>
 
@@ -284,20 +305,20 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
   },
   logoContainer: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     marginBottom: spacing.md,
   },
   logoEmoji: {
-    fontSize: 50,
-    marginRight: 8,
+    fontSize: 46,
+    marginLeft: spacing.sm,
   },
   babyEmoji: {
-    fontSize: 64,
+    fontSize: 58,
   },
   title: {
-    fontSize: 42,
-    fontWeight: 'bold',
+    fontSize: 40,
+    fontFamily: fonts.bold,
     color: colors.white,
     marginBottom: spacing.xs,
     textShadowColor: 'rgba(0, 0, 0, 0.2)',
@@ -305,7 +326,8 @@ const styles = StyleSheet.create({
     textShadowRadius: 4,
   },
   subtitle: {
-    fontSize: 18,
+    fontSize: 17,
+    fontFamily: fonts.regular,
     color: 'rgba(255, 255, 255, 0.9)',
   },
   formContainer: {
@@ -331,12 +353,12 @@ const styles = StyleSheet.create({
   },
   tabText: {
     fontSize: 16,
+    fontFamily: fonts.medium,
     color: colors.textSecondary,
-    fontWeight: '500',
   },
   activeTabText: {
     color: colors.primary,
-    fontWeight: '700',
+    fontFamily: fonts.bold,
   },
   form: {
     padding: spacing.lg,
@@ -355,20 +377,13 @@ const styles = StyleSheet.create({
   },
   error: {
     ...typography.bodySmall,
+    fontFamily: fonts.regular,
     color: colors.error,
     flex: 1,
     textAlign: 'right',
   },
   submitButton: {
     marginTop: spacing.md,
-  },
-  forgotPassword: {
-    alignItems: 'center',
-    marginTop: spacing.md,
-  },
-  forgotPasswordText: {
-    color: colors.primary,
-    fontSize: 14,
   },
   footer: {
     flexDirection: 'row-reverse',
@@ -378,13 +393,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
   },
   footerText: {
+    fontFamily: fonts.regular,
     color: colors.textSecondary,
     fontSize: 14,
     marginLeft: spacing.xs,
   },
   footerLink: {
+    fontFamily: fonts.bold,
     color: colors.primary,
     fontSize: 14,
-    fontWeight: '700',
   },
 });

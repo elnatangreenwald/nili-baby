@@ -6,7 +6,15 @@ import {
   TouchableOpacity,
   Animated,
 } from 'react-native';
-import { colors, spacing, borderRadius, typography, shadows } from '../utils/theme';
+import {
+  colors,
+  spacing,
+  borderRadius,
+  typography,
+  shadows,
+  fonts,
+  iconContainerSizes,
+} from '../utils/theme';
 import { formatDateTime, getTimeUntil } from '../utils/helpers';
 
 interface AppointmentItemProps {
@@ -24,20 +32,22 @@ interface AppointmentItemProps {
 const getAppointmentIcon = (title: string): string => {
   const lowerTitle = title.toLowerCase();
   if (lowerTitle.includes('טיפת חלב')) return '🍼';
-  if (lowerTitle.includes('רופא ילדים') || lowerTitle.includes('ילדים')) return '👨‍⚕️';
+  if (lowerTitle.includes('רופא ילדים') || lowerTitle.includes('ילדים'))
+    return '👨‍⚕️';
   if (lowerTitle.includes('חיסון')) return '💉';
   if (lowerTitle.includes('שמיעה')) return '👂';
-  if (lowerTitle.includes('ראייה') || lowerTitle.includes('עיניים')) return '👁️';
+  if (lowerTitle.includes('ראייה') || lowerTitle.includes('עיניים'))
+    return '👁️';
   if (lowerTitle.includes('שיניים')) return '🦷';
   return '🏥';
 };
 
 const getAppointmentColor = (title: string): string => {
   const lowerTitle = title.toLowerCase();
-  if (lowerTitle.includes('טיפת חלב')) return colors.primary;
-  if (lowerTitle.includes('חיסון')) return '#FF7043';
-  if (lowerTitle.includes('רופא')) return '#4FC3F7';
-  return '#81C784';
+  if (lowerTitle.includes('טיפת חלב')) return colors.appointmentMilkDrop;
+  if (lowerTitle.includes('חיסון')) return colors.appointmentVaccine;
+  if (lowerTitle.includes('רופא')) return colors.appointmentDoctor;
+  return colors.appointmentDefault;
 };
 
 export const AppointmentItem: React.FC<AppointmentItemProps> = ({
@@ -76,7 +86,9 @@ export const AppointmentItem: React.FC<AppointmentItemProps> = ({
         onPressOut={handlePressOut}
         activeOpacity={0.9}
       >
-        <View style={[styles.iconContainer, { backgroundColor: `${accentColor}20` }]}>
+        <View
+          style={[styles.iconContainer, { backgroundColor: `${accentColor}20` }]}
+        >
           <Text style={styles.icon}>{icon}</Text>
         </View>
 
@@ -84,15 +96,24 @@ export const AppointmentItem: React.FC<AppointmentItemProps> = ({
           <View style={styles.header}>
             <Text style={styles.title}>{appointment.title}</Text>
             {isUpcoming && (
-              <View style={[styles.statusBadge, { backgroundColor: `${accentColor}20` }]}>
-                <Text style={[styles.statusText, { color: accentColor }]}>קרוב</Text>
+              <View
+                style={[
+                  styles.statusBadge,
+                  { backgroundColor: `${accentColor}20` },
+                ]}
+              >
+                <Text style={[styles.statusText, { color: accentColor }]}>
+                  קרוב
+                </Text>
               </View>
             )}
           </View>
 
           <View style={styles.datetimeRow}>
             <Text style={styles.datetimeIcon}>📅</Text>
-            <Text style={styles.datetime}>{formatDateTime(appointment.datetime)}</Text>
+            <Text style={styles.datetime}>
+              {formatDateTime(appointment.datetime)}
+            </Text>
           </View>
 
           {appointment.location && (
@@ -112,7 +133,12 @@ export const AppointmentItem: React.FC<AppointmentItemProps> = ({
           )}
 
           {isUpcoming && (
-            <View style={[styles.timeLeftBadge, { backgroundColor: `${accentColor}15` }]}>
+            <View
+              style={[
+                styles.timeLeftBadge,
+                { backgroundColor: `${accentColor}15` },
+              ]}
+            >
               <Text style={styles.timeLeftIcon}>⏱️</Text>
               <Text style={[styles.timeLeftText, { color: accentColor }]}>
                 {getTimeUntil(appointment.datetime)}
@@ -137,7 +163,7 @@ export const AppointmentItem: React.FC<AppointmentItemProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   touchable: {
     flexDirection: 'row-reverse',
@@ -148,15 +174,15 @@ const styles = StyleSheet.create({
     ...shadows.sm,
   },
   iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: iconContainerSizes.md,
+    height: iconContainerSizes.md,
+    borderRadius: iconContainerSizes.md / 2,
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: spacing.md,
   },
   icon: {
-    fontSize: 28,
+    fontSize: 26,
   },
   content: {
     flex: 1,
@@ -169,7 +195,7 @@ const styles = StyleSheet.create({
   },
   title: {
     ...typography.body,
-    fontWeight: 'bold',
+    fontFamily: fonts.bold,
     color: colors.text,
     flex: 1,
     textAlign: 'right',
@@ -182,7 +208,7 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 10,
-    fontWeight: '600',
+    fontFamily: fonts.semiBold,
   },
   datetimeRow: {
     flexDirection: 'row-reverse',
@@ -195,8 +221,8 @@ const styles = StyleSheet.create({
   },
   datetime: {
     ...typography.body,
+    fontFamily: fonts.medium,
     color: colors.primary,
-    fontWeight: '500',
   },
   locationRow: {
     flexDirection: 'row-reverse',
@@ -209,6 +235,7 @@ const styles = StyleSheet.create({
   },
   location: {
     ...typography.bodySmall,
+    fontFamily: fonts.regular,
     color: colors.textSecondary,
     flex: 1,
   },
@@ -224,6 +251,7 @@ const styles = StyleSheet.create({
   },
   notes: {
     ...typography.caption,
+    fontFamily: fonts.regular,
     color: colors.textLight,
     flex: 1,
     textAlign: 'right',
@@ -243,7 +271,7 @@ const styles = StyleSheet.create({
   },
   timeLeftText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: fonts.semiBold,
   },
   deleteButton: {
     padding: spacing.xs,

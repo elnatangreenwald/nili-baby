@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Slider from '@react-native-community/slider';
-import { colors, spacing, typography, borderRadius } from '../utils/theme';
+import { colors, spacing, typography, borderRadius, fonts } from '../utils/theme';
 
 interface FeedingSliderProps {
   value: number;
@@ -16,8 +16,9 @@ export const FeedingSlider: React.FC<FeedingSliderProps> = ({
   maxValue = 200,
   targetValue = 120,
 }) => {
-  const percentage = targetValue > 0 ? Math.round((value / targetValue) * 100) : 0;
-  
+  const percentage =
+    targetValue > 0 ? Math.round((value / targetValue) * 100) : 0;
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -27,7 +28,7 @@ export const FeedingSlider: React.FC<FeedingSliderProps> = ({
           <Text style={styles.unit}>מ"ל</Text>
         </View>
       </View>
-      
+
       <Slider
         style={styles.slider}
         value={value}
@@ -39,29 +40,31 @@ export const FeedingSlider: React.FC<FeedingSliderProps> = ({
         maximumTrackTintColor={colors.border}
         thumbTintColor={colors.primary}
       />
-      
+
       <View style={styles.footer}>
         <Text style={styles.minLabel}>0</Text>
         <View style={styles.targetContainer}>
-          <Text style={[
-            styles.percentage,
-            percentage >= 100 && styles.percentageSuccess
-          ]}>
+          <Text
+            style={[
+              styles.percentage,
+              percentage >= 100 && styles.percentageSuccess,
+            ]}
+          >
             {percentage}% מהיעד
           </Text>
         </View>
         <Text style={styles.maxLabel}>{maxValue}</Text>
       </View>
-      
+
       {targetValue > 0 && (
         <View style={styles.progressContainer}>
           <View style={styles.progressBar}>
-            <View 
+            <View
               style={[
-                styles.progressFill, 
+                styles.progressFill,
                 { width: `${Math.min(percentage, 100)}%` },
-                percentage >= 100 && styles.progressSuccess
-              ]} 
+                percentage >= 100 && styles.progressSuccess,
+              ]}
             />
           </View>
         </View>
@@ -73,7 +76,7 @@ export const FeedingSlider: React.FC<FeedingSliderProps> = ({
 const styles = StyleSheet.create({
   container: {
     padding: spacing.md,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.background,
     borderRadius: borderRadius.lg,
     marginVertical: spacing.sm,
   },
@@ -85,20 +88,21 @@ const styles = StyleSheet.create({
   },
   label: {
     ...typography.body,
+    fontFamily: fonts.semiBold,
     color: colors.text,
-    fontWeight: '600',
   },
   valueContainer: {
     flexDirection: 'row-reverse',
     alignItems: 'baseline',
   },
   value: {
-    fontSize: 32,
-    fontWeight: '700',
+    fontSize: 36,
+    fontFamily: fonts.bold,
     color: colors.primary,
   },
   unit: {
     ...typography.body,
+    fontFamily: fonts.regular,
     color: colors.textSecondary,
     marginRight: spacing.xs,
   },
@@ -113,10 +117,12 @@ const styles = StyleSheet.create({
   },
   minLabel: {
     ...typography.caption,
+    fontFamily: fonts.regular,
     color: colors.textLight,
   },
   maxLabel: {
     ...typography.caption,
+    fontFamily: fonts.regular,
     color: colors.textLight,
   },
   targetContainer: {
@@ -124,8 +130,8 @@ const styles = StyleSheet.create({
   },
   percentage: {
     ...typography.bodySmall,
+    fontFamily: fonts.medium,
     color: colors.textSecondary,
-    fontWeight: '500',
   },
   percentageSuccess: {
     color: colors.success,

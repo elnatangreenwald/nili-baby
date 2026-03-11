@@ -8,15 +8,24 @@ import {
   Animated,
   TouchableOpacity,
 } from 'react-native';
-import { colors, borderRadius, spacing, typography, shadows } from '../utils/theme';
+import { colors, borderRadius, spacing, typography, shadows, fonts } from '../utils/theme';
 
 interface InputProps extends TextInputProps {
   label?: string;
   error?: string;
   icon?: string;
+  hint?: string;
 }
 
-export const Input: React.FC<InputProps> = ({ label, error, icon, style, ...props }) => {
+export const Input: React.FC<InputProps> = ({
+  label,
+  error,
+  icon,
+  hint,
+  style,
+  multiline,
+  ...props
+}) => {
   const [isFocused, setIsFocused] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const borderAnim = useRef(new Animated.Value(0)).current;
@@ -48,33 +57,48 @@ export const Input: React.FC<InputProps> = ({ label, error, icon, style, ...prop
 
   return (
     <View style={styles.container}>
-      {label && <Text style={[styles.label, isFocused && styles.labelFocused]}>{label}</Text>}
+      {label && (
+        <Text style={[styles.label, isFocused && styles.labelFocused]}>
+          {label}
+        </Text>
+      )}
       <Animated.View
         style={[
           styles.inputContainer,
           { borderColor },
           error && styles.inputContainerError,
           isFocused && styles.inputContainerFocused,
+          multiline && styles.inputContainerMultiline,
         ]}
       >
         {icon && <Text style={styles.icon}>{icon}</Text>}
         <TextInput
-          style={[styles.input, style]}
+          style={[
+            styles.input,
+            multiline && styles.inputMultiline,
+            style,
+          ]}
           placeholderTextColor={colors.textLight}
           onFocus={handleFocus}
           onBlur={handleBlur}
           secureTextEntry={isPassword && !showPassword}
+          multiline={multiline}
+          textAlignVertical={multiline ? 'top' : 'center'}
           {...props}
         />
         {isPassword && (
           <TouchableOpacity
             onPress={() => setShowPassword(!showPassword)}
             style={styles.eyeButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <Text style={styles.eyeIcon}>{showPassword ? '👁️' : '🔒'}</Text>
           </TouchableOpacity>
         )}
       </Animated.View>
+      {hint && !error && (
+        <Text style={styles.hint}>{hint}</Text>
+      )}
       {error && <Text style={styles.error}>{error}</Text>}
     </View>
   );
@@ -86,10 +110,10 @@ const styles = StyleSheet.create({
   },
   label: {
     ...typography.bodySmall,
+    fontFamily: fonts.semiBold,
     color: colors.text,
     marginBottom: spacing.xs,
     textAlign: 'right',
-    fontWeight: '600',
   },
   labelFocused: {
     color: colors.primary,
@@ -111,16 +135,26 @@ const styles = StyleSheet.create({
   inputContainerError: {
     borderColor: colors.error,
   },
+  inputContainerMultiline: {
+    minHeight: 100,
+    alignItems: 'flex-start',
+    paddingVertical: spacing.sm,
+  },
   icon: {
     fontSize: 20,
     marginLeft: spacing.sm,
   },
   input: {
     flex: 1,
-    fontSize: 16,
+    ...typography.body,
+    fontFamily: fonts.regular,
     color: colors.text,
     textAlign: 'right',
     paddingVertical: spacing.md,
+  },
+  inputMultiline: {
+    minHeight: 80,
+    paddingTop: spacing.sm,
   },
   eyeButton: {
     padding: spacing.xs,
@@ -129,8 +163,16 @@ const styles = StyleSheet.create({
   eyeIcon: {
     fontSize: 20,
   },
+  hint: {
+    ...typography.caption,
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+    textAlign: 'right',
+  },
   error: {
     ...typography.caption,
+    fontFamily: fonts.regular,
     color: colors.error,
     marginTop: spacing.xs,
     textAlign: 'right',
