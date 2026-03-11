@@ -1,0 +1,105 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  babies       BabyUser[]
+  feedings     Feeding[]
+
+  @@map("users")
+}
+
+model Baby {
+  id                     String   @id @default(uuid())
+  name                   String
+  birthDate              DateTime @map("birth_date")
+  feedingIntervalMinutes Int      @default(180) @map("feeding_interval_minutes")
+  targetAmountMl         Int      @default(120) @map("target_amount_ml")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  users        BabyUser[]
+  feedings     Feeding[]
+  reminders    Reminder[]
+  appointments Appointment[]
+
+  @@map("babies")
+}
+
+model BabyUser {
+  id       String   @id @default(uuid())
+  userId   String   @map("user_id")
+  babyId   String   @map("baby_id")
+  role     String   @default("parent")
+  joinedAt DateTime @default(now()) @map("joined_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  baby Baby @relation(fields: [babyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, babyId])
+  @@map("baby_users")
+}
+
+enum FeedingType {
+  BREASTFEEDING
+  FORMULA
+
+  @@map("feeding_type")
+}
+
+model Feeding {
+  id          String      @id @default(uuid())
+  babyId      String      @map("baby_id")
+  recordedBy  String      @map("recorded_by")
+  time        DateTime    @default(now())
+  amountMl    Int?        @map("amount_ml")
+  type        FeedingType
+  notes       String?
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  baby Baby @relation(fields: [babyId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [recordedBy], references: [id], onDelete: Cascade)
+
+  @@map("feedings")
+}
+
+model Reminder {
+  id        String   @id @default(uuid())
+  babyId    String   @map("baby_id")
+  title     String
+  dailyTime String   @map("daily_time")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  baby Baby @relation(fields: [babyId], references: [id], onDelete: Cascade)
+
+  @@map("reminders")
+}
+
+model Appointment {
+  id        String   @id @default(uuid())
+  babyId    String   @map("baby_id")
+  title     String
+  datetime  DateTime
+  location  String?
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  baby Baby @relation(fields: [babyId], references: [id], onDelete: Cascade)
+
+  @@map("appointments")
+}
