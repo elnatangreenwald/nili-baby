@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { StatusBar, I18nManager } from 'react-native';
+import { StatusBar, I18nManager, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { SplashScreen } from './src/screens/SplashScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { FeedingHistoryScreen } from './src/screens/FeedingHistoryScreen';
@@ -95,10 +96,10 @@ const TabIcon = ({ icon, color }: { icon: string; color: string }) => (
 );
 
 export default function App() {
+  const [showSplash, setShowSplash] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
 
   useEffect(() => {
-    checkAuth();
     soundService.init();
     
     return () => {
@@ -110,6 +111,20 @@ export default function App() {
     const token = await storage.getToken();
     setIsLoggedIn(!!token);
   };
+
+  const handleSplashFinish = () => {
+    setShowSplash(false);
+    checkAuth();
+  };
+
+  if (showSplash) {
+    return (
+      <SafeAreaProvider>
+        <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
+        <SplashScreen onFinish={handleSplashFinish} />
+      </SafeAreaProvider>
+    );
+  }
 
   if (isLoggedIn === null) {
     return null;
