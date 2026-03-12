@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+!server/public/assets/node_modules/
 .pnp/
 .pnp.js
 
