@@ -26,17 +26,22 @@ app.use('/api/feeding', feedingRoutes);
 app.use('/api/reminder', reminderRoutes);
 app.use('/api/appointment', appointmentRoutes);
 
-app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.static(path.join(__dirname, '../public'), {
+  dotfiles: 'allow',
+  index: false
+}));
+
+app.use('/_expo', express.static(path.join(__dirname, '../public/_expo')));
+app.use('/assets', express.static(path.join(__dirname, '../public/assets')));
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Nili Baby API is running' });
 });
 
-app.get('/app', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/index.html'));
-});
-
-app.get('/', (req, res) => {
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
