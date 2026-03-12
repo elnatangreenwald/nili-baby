@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StatusBar, I18nManager, Text, View, ActivityIndicator } from 'react-native';
+import { StatusBar, I18nManager, Text, View, ActivityIndicator, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -136,10 +136,10 @@ export default function App() {
   }, []);
 
   const onLayoutRootView = useCallback(async () => {
-    if (appIsReady && fontsLoaded) {
+    if (appIsReady && fontsReady) {
       await SplashScreenExpo.hideAsync();
     }
-  }, [appIsReady, fontsLoaded]);
+  }, [appIsReady, fontsReady]);
 
   const checkAuth = async () => {
     const token = await storage.getToken();
@@ -151,7 +151,9 @@ export default function App() {
     checkAuth();
   };
 
-  if (!appIsReady || !fontsLoaded) {
+  const fontsReady = Platform.OS === 'web' ? true : fontsLoaded;
+
+  if (!appIsReady || !fontsReady) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.primary }}>
         <ActivityIndicator size="large" color={colors.white} />
